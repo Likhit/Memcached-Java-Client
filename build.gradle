@@ -12,8 +12,9 @@ plugins {
 }
 
 dependencies {
-    // This dependency is used internally, and not exposed to consumers on their own compile classpath.
+    // These dependency is used internally, and not exposed to consumers on their own compile classpath.
     implementation files('lib/log4j.jar')
+    implementation project('RejigInterface')
 
     // Use JUnit test framework
     testImplementation 'junit:junit:4.12'

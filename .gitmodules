@@ -1,0 +1,3 @@
+[submodule "RejigInterface"]
+	path = RejigInterface
+	url = https://github.com/Likhit/RejigInterface.git
