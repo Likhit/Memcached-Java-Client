@@ -13,9 +13,9 @@
  * You should have received a copy of the BSD License along with this
  * library.
  *
- * @author greg whalin <greg@meetup.com> 
+ * @author greg whalin <greg@meetup.com>
  */
-package com.meetup.memcached;
+package edu.usc.cs550.rejig.client;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -27,20 +27,20 @@ import java.util.List;
 public final class ByteBufArrayInputStream extends InputStream implements LineInputStream {
 	private ByteBuffer[] bufs;
 	private int currentBuf = 0;
-	
+
 	public ByteBufArrayInputStream( List<ByteBuffer> bufs ) throws Exception {
 		this( bufs.toArray( new ByteBuffer[] {} ) );
 	}
-	
+
 	public ByteBufArrayInputStream( ByteBuffer[] bufs ) throws Exception {
 		if ( bufs == null || bufs.length == 0 )
 			throw new Exception( "buffer is empty" );
-		
+
 		this.bufs = bufs;
 		for ( ByteBuffer b : bufs )
 			b.flip();
 	}
-	
+
 	public int read() {
 		do {
 			if ( bufs[currentBuf].hasRemaining() )
@@ -48,11 +48,11 @@ public final class ByteBufArrayInputStream extends InputStream implements LineIn
 			currentBuf++;
 		}
 		while ( currentBuf < bufs.length );
-		
+
 		currentBuf--;
 		return -1;
 	}
-	
+
 	public int read( byte[] buf ) {
 		int len = buf.length;
 		int bufPos = 0;
@@ -65,20 +65,20 @@ public final class ByteBufArrayInputStream extends InputStream implements LineIn
 			currentBuf++;
 		}
 		while ( currentBuf < bufs.length && bufPos < len );
-		
+
 		currentBuf--;
-		
+
 		if ( bufPos > 0 || ( bufPos == 0 && len == 0 ) )
 			return bufPos;
 		else
 			return -1;
 	}
-	
+
 	public String readLine() throws IOException {
 		byte[] b = new byte[1];
 		ByteArrayOutputStream bos = new ByteArrayOutputStream();
 		boolean eol = false;
-		
+
 		while ( read( b, 0, 1 ) != -1 ) {
 			if ( b[0] == 13 ) {
 				eol = true;
@@ -90,31 +90,31 @@ public final class ByteBufArrayInputStream extends InputStream implements LineIn
 					eol = false;
 				}
 			}
-			
+
 			// cast byte into char array
 			bos.write( b, 0, 1 );
 		}
-		
+
 		if ( bos == null || bos.size() <= 0 ) {
 			throw new IOException( "++++ Stream appears to be dead, so closing it down" );
 		}
-		
+
 		// else return the string
 		return bos.toString().trim();
 	}
-	
+
 	public void clearEOL() throws IOException {
 		byte[] b = new byte[1];
 		boolean eol = false;
 		while ( read( b, 0, 1 ) != -1 ) {
-		
+
 			// only stop when we see
 			// \r (13) followed by \n (10)
 			if ( b[0] == 13 ) {
 				eol = true;
 				continue;
 			}
-			
+
 			if ( eol ) {
 				if ( b[0] == 10 )
 					break;
@@ -122,7 +122,7 @@ public final class ByteBufArrayInputStream extends InputStream implements LineIn
 			}
 		}
 	}
-	
+
 	public String toString() {
 		StringBuilder sb = new StringBuilder( "ByteBufArrayIS: " );
 		sb.append( bufs.length ).append( " bufs of sizes: \n" );

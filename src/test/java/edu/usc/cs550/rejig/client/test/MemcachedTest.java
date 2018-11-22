@@ -13,11 +13,11 @@
  * You should have received a copy of the BSD License along with this
  * library.
  *
- * @author Greg Whalin <greg@meetup.com> 
+ * @author Greg Whalin <greg@meetup.com>
  */
-package com.meetup.memcached.test;
+package edu.usc.cs550.rejig.client.test;
 
-import com.meetup.memcached.*;
+import edu.usc.cs550.rejig.client.*;
 import java.util.*;
 
 public class MemcachedTest {
@@ -25,14 +25,14 @@ public class MemcachedTest {
 	// store results from threads
 	private static Hashtable<Integer,StringBuilder> threadInfo =
 		new Hashtable<Integer,StringBuilder>();
-    
+
 	/**
 	 * This runs through some simple tests of the MemcacheClient.
 	 *
 	 * Command line args:
 	 * args[0] = number of threads to spawn
 	 * args[1] = number of runs per thread
-	 * args[2] = size of object to store 
+	 * args[2] = size of object to store
 	 *
 	 * @param args the command line arguments
 	 */
@@ -92,8 +92,8 @@ public class MemcachedTest {
 		System.exit(1);
 	}
 
-	/** 
-	 * Test code per thread. 
+	/**
+	 * Test code per thread.
 	 */
 	private static class bench extends Thread {
 		private int runs;

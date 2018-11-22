@@ -13,15 +13,15 @@
  * You should have received a copy of the BSD License along with this
  * library.
  *
- * @author Greg Whalin <greg@meetup.com> 
+ * @author Greg Whalin <greg@meetup.com>
  */
-package com.meetup.memcached;
+package edu.usc.cs550.rejig.client;
 
 import java.util.*;
 import java.util.zip.*;
-import java.nio.*;          
+import java.nio.*;
 import java.net.InetAddress;
-import java.nio.charset.*;  
+import java.nio.charset.*;
 import java.nio.channels.*;
 import java.nio.channels.spi.*;
 import java.io.*;
@@ -32,7 +32,7 @@ import org.apache.log4j.Logger;
 /**
  * This is a Memcached client for the Java platform available from
  *  <a href="http:/www.danga.com/memcached/">http://www.danga.com/memcached/</a>.
- * <br/> 
+ * <br/>
  * Supports setting, adding, replacing, deleting compressed/uncompressed and<br/>
  * serialized (can be stored as string if object is native class) objects to memcached.<br/>
  * <br/>
@@ -42,112 +42,112 @@ import org.apache.log4j.Logger;
  * <br/>
  * Some examples of use follow.<br/>
  * <h3>To create cache client object and set params:</h3>
- * <pre> 
+ * <pre>
  *	MemcachedClient mc = new MemcachedClient();
  *
- *	// compression is enabled by default	
+ *	// compression is enabled by default
  *	mc.setCompressEnable(true);
  *
- *	// set compression threshhold to 4 KB (default: 15 KB)	
+ *	// set compression threshhold to 4 KB (default: 15 KB)
  *	mc.setCompressThreshold(4096);
  *
  *	// turn on storing primitive types as a string representation
- *	// Should not do this in most cases.	
+ *	// Should not do this in most cases.
  *	mc.setPrimitiveAsString(true);
- * </pre>	
+ * </pre>
  * <h3>To store an object:</h3>
  * <pre>
  *	MemcachedClient mc = new MemcachedClient();
- *	String key   = "cacheKey1";	
- *	Object value = SomeClass.getObject();	
+ *	String key   = "cacheKey1";
+ *	Object value = SomeClass.getObject();
  *	mc.set(key, value);
- * </pre> 
+ * </pre>
  * <h3>To store an object using a custom server hashCode:</h3>
  * <pre>
  *	MemcachedClient mc = new MemcachedClient();
- *	String key   = "cacheKey1";	
- *	Object value = SomeClass.getObject();	
- *	Integer hash = new Integer(45);	
+ *	String key   = "cacheKey1";
+ *	Object value = SomeClass.getObject();
+ *	Integer hash = new Integer(45);
  *	mc.set(key, value, hash);
- * </pre> 
+ * </pre>
  * The set method shown above will always set the object in the cache.<br/>
  * The add and replace methods do the same, but with a slight difference.<br/>
  * <ul>
  * 	<li>add -- will store the object only if the server does not have an entry for this key</li>
  * 	<li>replace -- will store the object only if the server already has an entry for this key</li>
- * </ul> 
+ * </ul>
  * <h3>To delete a cache entry:</h3>
  * <pre>
  *	MemcachedClient mc = new MemcachedClient();
- *	String key   = "cacheKey1";	
+ *	String key   = "cacheKey1";
  *	mc.delete(key);
- * </pre> 
+ * </pre>
  * <h3>To delete a cache entry using a custom hash code:</h3>
  * <pre>
  *	MemcachedClient mc = new MemcachedClient();
- *	String key   = "cacheKey1";	
- *	Integer hash = new Integer(45);	
+ *	String key   = "cacheKey1";
+ *	Integer hash = new Integer(45);
  *	mc.delete(key, hashCode);
- * </pre> 
+ * </pre>
  * <h3>To store a counter and then increment or decrement that counter:</h3>
  * <pre>
  *	MemcachedClient mc = new MemcachedClient();
- *	String key   = "counterKey";	
+ *	String key   = "counterKey";
  *	mc.storeCounter(key, new Integer(100));
- *	System.out.println("counter after adding      1: " mc.incr(key));	
- *	System.out.println("counter after adding      5: " mc.incr(key, 5));	
- *	System.out.println("counter after subtracting 4: " mc.decr(key, 4));	
- *	System.out.println("counter after subtracting 1: " mc.decr(key));	
- * </pre> 
+ *	System.out.println("counter after adding      1: " mc.incr(key));
+ *	System.out.println("counter after adding      5: " mc.incr(key, 5));
+ *	System.out.println("counter after subtracting 4: " mc.decr(key, 4));
+ *	System.out.println("counter after subtracting 1: " mc.decr(key));
+ * </pre>
  * <h3>To store a counter and then increment or decrement that counter with custom hash:</h3>
  * <pre>
  *	MemcachedClient mc = new MemcachedClient();
- *	String key   = "counterKey";	
- *	Integer hash = new Integer(45);	
+ *	String key   = "counterKey";
+ *	Integer hash = new Integer(45);
  *	mc.storeCounter(key, new Integer(100), hash);
- *	System.out.println("counter after adding      1: " mc.incr(key, 1, hash));	
- *	System.out.println("counter after adding      5: " mc.incr(key, 5, hash));	
- *	System.out.println("counter after subtracting 4: " mc.decr(key, 4, hash));	
- *	System.out.println("counter after subtracting 1: " mc.decr(key, 1, hash));	
- * </pre> 
+ *	System.out.println("counter after adding      1: " mc.incr(key, 1, hash));
+ *	System.out.println("counter after adding      5: " mc.incr(key, 5, hash));
+ *	System.out.println("counter after subtracting 4: " mc.decr(key, 4, hash));
+ *	System.out.println("counter after subtracting 1: " mc.decr(key, 1, hash));
+ * </pre>
  * <h3>To retrieve an object from the cache:</h3>
  * <pre>
  *	MemcachedClient mc = new MemcachedClient();
- *	String key   = "key";	
- *	Object value = mc.get(key);	
- * </pre> 
+ *	String key   = "key";
+ *	Object value = mc.get(key);
+ * </pre>
  * <h3>To retrieve an object from the cache with custom hash:</h3>
  * <pre>
  *	MemcachedClient mc = new MemcachedClient();
- *	String key   = "key";	
- *	Integer hash = new Integer(45);	
- *	Object value = mc.get(key, hash);	
- * </pre> 
+ *	String key   = "key";
+ *	Integer hash = new Integer(45);
+ *	Object value = mc.get(key, hash);
+ * </pre>
  * <h3>To retrieve an multiple objects from the cache</h3>
  * <pre>
  *	MemcachedClient mc = new MemcachedClient();
  *	String[] keys      = { "key", "key1", "key2" };
  *	Map&lt;Object&gt; values = mc.getMulti(keys);
- * </pre> 
+ * </pre>
  * <h3>To retrieve an multiple objects from the cache with custom hashing</h3>
  * <pre>
  *	MemcachedClient mc = new MemcachedClient();
  *	String[] keys      = { "key", "key1", "key2" };
  *	Integer[] hashes   = { new Integer(45), new Integer(32), new Integer(44) };
  *	Map&lt;Object&gt; values = mc.getMulti(keys, hashes);
- * </pre> 
+ * </pre>
  * <h3>To flush all items in server(s)</h3>
  * <pre>
  *	MemcachedClient mc = new MemcachedClient();
  *	mc.flushAll();
- * </pre> 
+ * </pre>
  * <h3>To get stats from server(s)</h3>
  * <pre>
  *	MemcachedClient mc = new MemcachedClient();
  *	Map stats = mc.stats();
- * </pre> 
+ * </pre>
  *
- * @author greg whalin <greg@meetup.com> 
+ * @author greg whalin <greg@meetup.com>
  * @author Richard 'toast' Russo <russor@msoe.edu>
  * @author Kevin Burton <burton@peerfear.org>
  * @author Robert Watts <robert@wattsit.co.uk>
@@ -182,8 +182,8 @@ public class MemcachedClient {
 
 	// default compression threshold
 	private static final int COMPRESS_THRESH = 30720;
-    
-	// values for cache flags 
+
+	// values for cache flags
 	public static final int MARKER_BYTE             = 1;
 	public static final int MARKER_BOOLEAN          = 8192;
 	public static final int MARKER_INTEGER          = 4;
@@ -199,7 +199,7 @@ public class MemcachedClient {
 	public static final int MARKER_BYTEARR          = 4096;
 	public static final int F_COMPRESSED            = 2;
 	public static final int F_SERIALIZED            = 8;
-	
+
 	// flags
 	private boolean sanitizeKeys;
 	private boolean primitiveAsString;
@@ -226,10 +226,10 @@ public class MemcachedClient {
 		init();
 	}
 
-	/** 
+	/**
 	 * Creates a new instance of MemCachedClient
 	 * accepting a passed in pool name.
-	 * 
+	 *
 	 * @param poolName name of SockIOPool
 	 */
 	public MemcachedClient( String poolName ) {
@@ -237,10 +237,10 @@ public class MemcachedClient {
 		init();
 	}
 
-	/** 
+	/**
 	 * Creates a new instance of MemCacheClient but
 	 * acceptes a passed in ClassLoader.
-	 * 
+	 *
 	 * @param classLoader ClassLoader object.
 	 */
 	public MemcachedClient( ClassLoader classLoader ) {
@@ -248,11 +248,11 @@ public class MemcachedClient {
 		init();
 	}
 
-	/** 
+	/**
 	 * Creates a new instance of MemCacheClient but
 	 * acceptes a passed in ClassLoader and a passed
 	 * in ErrorHandler.
-	 * 
+	 *
 	 * @param classLoader ClassLoader object.
 	 * @param errorHandler ErrorHandler object.
 	 */
@@ -262,11 +262,11 @@ public class MemcachedClient {
 		init();
 	}
 
-	/** 
+	/**
 	 * Creates a new instance of MemCacheClient but
 	 * acceptes a passed in ClassLoader, ErrorHandler,
 	 * and SockIOPool name.
-	 * 
+	 *
 	 * @param classLoader ClassLoader object.
 	 * @param errorHandler ErrorHandler object.
 	 * @param poolName SockIOPool name
@@ -278,7 +278,7 @@ public class MemcachedClient {
 		init();
 	}
 
-	/** 
+	/**
 	 * Initializes client object to defaults.
 	 *
 	 * This enables compression and sets compression threshhold to 15 KB.
@@ -295,48 +295,48 @@ public class MemcachedClient {
 		this.pool               = SockIOPool.getInstance( poolName );
 	}
 
-	/** 
+	/**
 	 * Sets an optional ClassLoader to be used for
 	 * serialization.
-	 * 
-	 * @param classLoader 
+	 *
+	 * @param classLoader
 	 */
 	public void setClassLoader( ClassLoader classLoader ) {
 		this.classLoader = classLoader;
 	}
 
-	/** 
+	/**
 	 * Sets an optional ErrorHandler.
-	 * 
-	 * @param errorHandler 
+	 *
+	 * @param errorHandler
 	 */
 	public void setErrorHandler( ErrorHandler errorHandler ) {
 		this.errorHandler = errorHandler;
 	}
 
-	/** 
+	/**
 	 * Enables/disables sanitizing keys by URLEncoding.
-	 * 
+	 *
 	 * @param sanitizeKeys if true, then URLEncode all keys
 	 */
 	public void setSanitizeKeys( boolean sanitizeKeys ) {
 		this.sanitizeKeys = sanitizeKeys;
 	}
 
-	/** 
-	 * Enables storing primitive types as their String values. 
-	 * 
+	/**
+	 * Enables storing primitive types as their String values.
+	 *
 	 * @param primitiveAsString if true, then store all primitives as their string value.
 	 */
 	public void setPrimitiveAsString( boolean primitiveAsString ) {
 		this.primitiveAsString = primitiveAsString;
 	}
 
-	/** 
-	 * Sets default String encoding when storing primitives as Strings. 
+	/**
+	 * Sets default String encoding when storing primitives as Strings.
 	 * Default is UTF-8.
-	 * 
-	 * @param defaultEncoding 
+	 *
+	 * @param defaultEncoding
 	 */
 	public void setDefaultEncoding( String defaultEncoding ) {
 		this.defaultEncoding = defaultEncoding;
@@ -358,7 +358,7 @@ public class MemcachedClient {
 	public void setCompressEnable( boolean compressEnable ) {
 		this.compressEnable = compressEnable;
 	}
-    
+
 	/**
 	 * Sets the required length for data to be considered for compression.
 	 *
@@ -373,9 +373,9 @@ public class MemcachedClient {
 		this.compressThreshold = compressThreshold;
 	}
 
-	/** 
-	 * Checks to see if key exists in cache. 
-	 * 
+	/**
+	 * Checks to see if key exists in cache.
+	 *
 	 * @param key the key to look for
 	 * @return true if key found in cache, false if not (or if cache is down)
 	 */
@@ -393,9 +393,9 @@ public class MemcachedClient {
 		return delete( key, null, null );
 	}
 
-	/** 
-	 * Deletes an object from cache given cache key and expiration date. 
-	 * 
+	/**
+	 * Deletes an object from cache given cache key and expiration date.
+	 *
 	 * @param key the key to be removed
 	 * @param expiry when to expire the record.
 	 * @return <code>true</code>, if the data was deleted successfully
@@ -454,11 +454,11 @@ public class MemcachedClient {
 			command.append( " " + expiry.getTime() / 1000 );
 
 		command.append( "\r\n" );
-		
+
 		try {
 			sock.write( command.toString().getBytes() );
 			sock.flush();
-			
+
 			// if we get appropriate response back, then we return true
 			String line = sock.readLine();
 			if ( DELETED.equals( line ) ) {
@@ -506,7 +506,7 @@ public class MemcachedClient {
 
 		return false;
 	}
-    
+
 	/**
 	 * Stores data on the server; only the key and the value are specified.
 	 *
@@ -651,7 +651,7 @@ public class MemcachedClient {
 		return set( "replace", key, value, expiry, hashCode, primitiveAsString );
 	}
 
-	/** 
+	/**
 	 * Stores data to cache.
 	 *
 	 * If data does not already exist for this key on the server, or if the key is being<br/>
@@ -662,7 +662,7 @@ public class MemcachedClient {
 	 * the data will be stored in compressed form.<br/>
 	 * <br/>
 	 * As of the current release, all objects stored will use java serialization.
-	 * 
+	 *
 	 * @param cmdname action to take (set, add, replace)
 	 * @param key key to store cache under
 	 * @param value object to cache
@@ -698,24 +698,24 @@ public class MemcachedClient {
 
 		// get SockIO obj
 		SockIOPool.SockIO sock = pool.getSock( key, hashCode );
-		
+
 		if ( sock == null ) {
 			if ( errorHandler != null )
 				errorHandler.handleErrorOnSet( this, new IOException( "no socket to server available" ), key );
 			return false;
 		}
-		
+
 		if ( expiry == null )
 			expiry = new Date(0);
 
 		// store flags
 		int flags = 0;
-		
+
 		// byte array to hold data
 		byte[] val;
 
         if ( NativeHandler.isHandled( value ) ) {
-			
+
 			if ( asString ) {
 				// useful for sharing data between java and non-java
 				// and also for storing ints for the increment method
@@ -784,9 +784,9 @@ public class MemcachedClient {
 				return false;
 			}
 		}
-		
+
 		// now try to compress if we want to
-		// and if the length is over the threshold 
+		// and if the length is over the threshold
 		if ( compressEnable && val.length > compressThreshold ) {
 
 			try {
@@ -799,7 +799,7 @@ public class MemcachedClient {
 				gos.write( val, 0, val.length );
 				gos.finish();
 				gos.close();
-				
+
 				// store it and set compression flag
 				val = bos.toByteArray();
 				flags |= F_COMPRESSED;
@@ -875,9 +875,9 @@ public class MemcachedClient {
 		return false;
 	}
 
-	/** 
+	/**
 	 * Store a counter to memcached given a key
-	 * 
+	 *
 	 * @param key cache key
 	 * @param counter number to store
 	 * @return true/false indicating success
@@ -886,9 +886,9 @@ public class MemcachedClient {
 		return set( "set", key, new Long( counter ), null, null, true );
 	}
 
-	/** 
+	/**
 	 * Store a counter to memcached given a key
-	 * 
+	 *
 	 * @param key cache key
 	 * @param counter number to store
 	 * @return true/false indicating success
@@ -896,10 +896,10 @@ public class MemcachedClient {
 	public boolean storeCounter( String key, Long counter ) {
 		return set( "set", key, counter, null, null, true );
 	}
-    
-	/** 
+
+	/**
 	 * Store a counter to memcached given a key
-	 * 
+	 *
 	 * @param key cache key
 	 * @param counter number to store
 	 * @param hashCode if not null, then the int hashcode to use
@@ -909,8 +909,8 @@ public class MemcachedClient {
 		return set( "set", key, counter, null, hashCode, true );
 	}
 
-	/** 
-	 * Returns value in counter at given key as long. 
+	/**
+	 * Returns value in counter at given key as long.
 	 *
 	 * @param key cache ket
 	 * @return counter value or -1 if not found
@@ -919,8 +919,8 @@ public class MemcachedClient {
 		return getCounter( key, null );
 	}
 
-	/** 
-	 * Returns value in counter at given key as long. 
+	/**
+	 * Returns value in counter at given key as long.
 	 *
 	 * @param key cache ket
 	 * @param hashCode if not null, then the int hashcode to use
@@ -947,13 +947,13 @@ public class MemcachedClient {
 			if ( log.isInfoEnabled() )
 				log.info( String.format( "Failed to parse Long value for key: %s", key ) );
 		}
-		
+
 		return counter;
 	}
 
-	/** 
-	 * Thread safe way to initialize and increment a counter. 
-	 * 
+	/**
+	 * Thread safe way to initialize and increment a counter.
+	 *
 	 * @param key key where the data is stored
 	 * @return value of incrementer
 	 */
@@ -961,9 +961,9 @@ public class MemcachedClient {
 		return addOrIncr( key, 0, null );
 	}
 
-	/** 
-	 * Thread safe way to initialize and increment a counter. 
-	 * 
+	/**
+	 * Thread safe way to initialize and increment a counter.
+	 *
 	 * @param key key where the data is stored
 	 * @param inc value to set or increment by
 	 * @return value of incrementer
@@ -972,9 +972,9 @@ public class MemcachedClient {
 		return addOrIncr( key, inc, null );
 	}
 
-	/** 
-	 * Thread safe way to initialize and increment a counter. 
-	 * 
+	/**
+	 * Thread safe way to initialize and increment a counter.
+	 *
 	 * @param key key where the data is stored
 	 * @param inc value to set or increment by
 	 * @param hashCode if not null, then the int hashcode to use
@@ -991,9 +991,9 @@ public class MemcachedClient {
 		}
 	}
 
-	/** 
-	 * Thread safe way to initialize and decrement a counter. 
-	 * 
+	/**
+	 * Thread safe way to initialize and decrement a counter.
+	 *
 	 * @param key key where the data is stored
 	 * @return value of incrementer
 	 */
@@ -1001,9 +1001,9 @@ public class MemcachedClient {
 		return addOrDecr( key, 0, null );
 	}
 
-	/** 
-	 * Thread safe way to initialize and decrement a counter. 
-	 * 
+	/**
+	 * Thread safe way to initialize and decrement a counter.
+	 *
 	 * @param key key where the data is stored
 	 * @param inc value to set or increment by
 	 * @return value of incrementer
@@ -1012,9 +1012,9 @@ public class MemcachedClient {
 		return addOrDecr( key, inc, null );
 	}
 
-	/** 
-	 * Thread safe way to initialize and decrement a counter. 
-	 * 
+	/**
+	 * Thread safe way to initialize and decrement a counter.
+	 *
 	 * @param key key where the data is stored
 	 * @param inc value to set or increment by
 	 * @param hashCode if not null, then the int hashcode to use
@@ -1041,9 +1041,9 @@ public class MemcachedClient {
 		return incrdecr( "incr", key, 1, null );
 	}
 
-	/** 
-	 * Increment the value at the specified key by passed in val. 
-	 * 
+	/**
+	 * Increment the value at the specified key by passed in val.
+	 *
 	 * @param key key where the data is stored
 	 * @param inc how much to increment by
 	 * @return -1, if the key is not found, the value after incrementing otherwise
@@ -1063,7 +1063,7 @@ public class MemcachedClient {
 	public long incr( String key, long inc, Integer hashCode ) {
 		return incrdecr( "incr", key, inc, hashCode );
 	}
-	
+
 	/**
 	 * Decrement the value at the specified key by 1, and then return it.
 	 *
@@ -1097,9 +1097,9 @@ public class MemcachedClient {
 		return incrdecr( "decr", key, inc, hashCode );
 	}
 
-	/** 
+	/**
 	 * Increments/decrements the value at the specified key by inc.
-	 * 
+	 *
 	 *  Note that the server uses a 32-bit unsigned integer, and checks for<br/>
 	 *  underflow. In the event of underflow, the result will be zero.  Because<br/>
 	 *  Java lacks unsigned types, the value is returned as a 64-bit integer.<br/>
@@ -1140,7 +1140,7 @@ public class MemcachedClient {
 				errorHandler.handleErrorOnSet( this, new IOException( "no socket to server available" ), key );
 			return -1;
 		}
-		
+
 		try {
 			String cmd = String.format( "%s %s %d\r\n", cmdname, key, inc );
 			if ( log.isDebugEnabled() )
@@ -1196,7 +1196,7 @@ public class MemcachedClient {
 
 			sock = null;
 		}
-		
+
 		if ( sock != null ) {
 			sock.close();
 			sock = null;
@@ -1221,7 +1221,7 @@ public class MemcachedClient {
 		return get( key, null, false );
 	}
 
-	/** 
+	/**
 	 * Retrieve a key from the server, using a specific hash.
 	 *
 	 *  If the data was compressed or serialized when compressed, it will automatically<br/>
@@ -1274,7 +1274,7 @@ public class MemcachedClient {
 
 		// get SockIO obj using cache key
 		SockIOPool.SockIO sock = pool.getSock( key, hashCode );
-	    
+
 	    if ( sock == null ) {
 			if ( errorHandler != null )
 				errorHandler.handleErrorOnGet( this, new IOException( "no socket to server available" ), key );
@@ -1286,7 +1286,7 @@ public class MemcachedClient {
 
 			if ( log.isDebugEnabled() )
 				log.debug("++++ memcache get command: " + cmd);
-			
+
 			sock.write( cmd.getBytes() );
 			sock.flush();
 
@@ -1309,7 +1309,7 @@ public class MemcachedClient {
 						log.debug( "++++ flags: " + flag );
 						log.debug( "++++ length: " + length );
 					}
-					
+
 					// read obj into buffer
 					byte[] buf = new byte[length];
 					sock.read( buf );
@@ -1322,7 +1322,7 @@ public class MemcachedClient {
 							// will need to be, and we don't want to resize it a bunch
 							GZIPInputStream gzi = new GZIPInputStream( new ByteArrayInputStream( buf ) );
 							ByteArrayOutputStream bos = new ByteArrayOutputStream( buf.length );
-							
+
 							int count;
 							byte[] tmp = new byte[2048];
 							while ( (count = gzi.read(tmp)) != -1 ) {
@@ -1355,7 +1355,7 @@ public class MemcachedClient {
 						else {
 							// decoding object
 							try {
-								o = NativeHandler.decode( buf, flag );    
+								o = NativeHandler.decode( buf, flag );
 							}
 							catch ( Exception e ) {
 
@@ -1392,7 +1392,7 @@ public class MemcachedClient {
 					break;
 				}
 			}
-			
+
 			sock.close();
 			sock = null;
 			return o;
@@ -1421,7 +1421,7 @@ public class MemcachedClient {
 		return null;
 	}
 
-	/** 
+	/**
 	 * Retrieve multiple objects from the memcache.
 	 *
 	 *  This is recommended over repeated calls to {@link #get(String) get()}, since it<br/>
@@ -1434,7 +1434,7 @@ public class MemcachedClient {
 		return getMultiArray( keys, null, false );
 	}
 
-	/** 
+	/**
 	 * Retrieve multiple objects from the memcache.
 	 *
 	 *  This is recommended over repeated calls to {@link #get(String) get()}, since it<br/>
@@ -1448,7 +1448,7 @@ public class MemcachedClient {
 		return getMultiArray( keys, hashCodes, false );
 	}
 
-	/** 
+	/**
 	 * Retrieve multiple objects from the memcache.
 	 *
 	 *  This is recommended over repeated calls to {@link #get(String) get()}, since it<br/>
@@ -1488,7 +1488,7 @@ public class MemcachedClient {
 	public Map<String,Object> getMulti( String[] keys ) {
 		return getMulti( keys, null, false );
 	}
-    
+
 	/**
 	 * Retrieve multiple keys from the memcache.
 	 *
@@ -1572,7 +1572,7 @@ public class MemcachedClient {
 			// return to pool
 			sock.close();
 		}
-		
+
 		if ( log.isInfoEnabled() )
 			log.info( "multi get socket count : " + cmdMap.size() );
 
@@ -1615,12 +1615,12 @@ public class MemcachedClient {
 		return ret;
 	}
 
-	/** 
+	/**
 	 * This method loads the data from cache into a Map.
 	 *
 	 * Pass a SockIO object which is ready to receive data and a HashMap<br/>
 	 * to store the results.
-	 * 
+	 *
 	 * @param sock socket waiting to pass back data
 	 * @param hm hashmap to store data into
 	 * @param asString if true, and if we are using NativehHandler, return string val
@@ -1644,7 +1644,7 @@ public class MemcachedClient {
 					log.debug( "++++ flags: " + flag );
 					log.debug( "++++ length: " + length );
 				}
-				
+
 				// read obj into buffer
 				byte[] buf = new byte[length];
 				input.read( buf );
@@ -1652,7 +1652,7 @@ public class MemcachedClient {
 
 				// ready object
 				Object o;
-				
+
 				// check for compression
 				if ( (flag & F_COMPRESSED) == F_COMPRESSED ) {
 					try {
@@ -1661,7 +1661,7 @@ public class MemcachedClient {
 						// will need to be, and we don't want to resize it a bunch
 						GZIPInputStream gzi = new GZIPInputStream( new ByteArrayInputStream( buf ) );
 						ByteArrayOutputStream bos = new ByteArrayOutputStream( buf.length );
-						
+
 						int count;
 						byte[] tmp = new byte[2048];
 						while ( (count = gzi.read(tmp)) != -1 ) {
@@ -1694,7 +1694,7 @@ public class MemcachedClient {
 					else {
 						// decoding object
 						try {
-							o = NativeHandler.decode( buf, flag );    
+							o = NativeHandler.decode( buf, flag );
 						}
 						catch ( Exception e ) {
 
@@ -1717,9 +1717,9 @@ public class MemcachedClient {
 							log.info( "++++ deserializing " + o.getClass() );
 					}
 					catch ( InvalidClassException e ) {
-						/* Errors de-serializing are to be expected in the case of a 
-						 * long running server that spans client restarts with updated 
-						 * classes. 
+						/* Errors de-serializing are to be expected in the case of a
+						 * long running server that spans client restarts with updated
+						 * classes.
 						 */
 						// if we have an errorHandler, use its hook
 						if ( errorHandler != null )
@@ -1755,23 +1755,23 @@ public class MemcachedClient {
 		return ( sanitizeKeys ) ? URLEncoder.encode( key, "UTF-8" ) : key;
 	}
 
-	/** 
+	/**
 	 * Invalidates the entire cache.
 	 *
 	 * Will return true only if succeeds in clearing all servers.
-	 * 
+	 *
 	 * @return success true/false
 	 */
 	public boolean flushAll() {
 		return flushAll( null );
 	}
 
-	/** 
+	/**
 	 * Invalidates the entire cache.
 	 *
 	 * Will return true only if succeeds in clearing all servers.
 	 * If pass in null, then will try to flush all servers.
-	 * 
+	 *
 	 * @param servers optional array of host(s) to flush (host:port)
 	 * @return success true/false
 	 */
@@ -1851,108 +1851,108 @@ public class MemcachedClient {
 		return success;
 	}
 
-	/** 
+	/**
 	 * Retrieves stats for all servers.
 	 *
 	 * Returns a map keyed on the servername.
 	 * The value is another map which contains stats
 	 * with stat name as key and value as value.
-	 * 
+	 *
 	 * @return Stats map
 	 */
 	public Map stats() {
 		return stats( null );
 	}
 
-	/** 
+	/**
 	 * Retrieves stats for passed in servers (or all servers).
 	 *
 	 * Returns a map keyed on the servername.
 	 * The value is another map which contains stats
 	 * with stat name as key and value as value.
-	 * 
-	 * @param servers string array of servers to retrieve stats from, or all if this is null	 
+	 *
+	 * @param servers string array of servers to retrieve stats from, or all if this is null
 	 * @return Stats map
 	 */
 	public Map stats( String[] servers ) {
 		return stats( servers, "stats\r\n", STATS );
-	}	
+	}
 
-	/** 
+	/**
 	 * Retrieves stats items for all servers.
 	 *
 	 * Returns a map keyed on the servername.
 	 * The value is another map which contains item stats
 	 * with itemname:number:field as key and value as value.
-	 * 
+	 *
 	 * @return Stats map
 	 */
 	public Map statsItems() {
 		return statsItems( null );
 	}
-	
-	/** 
+
+	/**
 	 * Retrieves stats for passed in servers (or all servers).
 	 *
 	 * Returns a map keyed on the servername.
 	 * The value is another map which contains item stats
 	 * with itemname:number:field as key and value as value.
-	 * 
+	 *
 	 * @param servers string array of servers to retrieve stats from, or all if this is null
 	 * @return Stats map
 	 */
 	public Map statsItems( String[] servers ) {
 		return stats( servers, "stats items\r\n", STATS );
 	}
-	
-	/** 
+
+	/**
 	 * Retrieves stats items for all servers.
 	 *
 	 * Returns a map keyed on the servername.
 	 * The value is another map which contains slabs stats
 	 * with slabnumber:field as key and value as value.
-	 * 
+	 *
 	 * @return Stats map
 	 */
 	public Map statsSlabs() {
 		return statsSlabs( null );
 	}
-	
-	/** 
+
+	/**
 	 * Retrieves stats for passed in servers (or all servers).
 	 *
 	 * Returns a map keyed on the servername.
 	 * The value is another map which contains slabs stats
 	 * with slabnumber:field as key and value as value.
-	 * 
+	 *
 	 * @param servers string array of servers to retrieve stats from, or all if this is null
 	 * @return Stats map
 	 */
 	public Map statsSlabs( String[] servers ) {
 		return stats( servers, "stats slabs\r\n", STATS );
 	}
-	
-	/** 
+
+	/**
 	 * Retrieves items cachedump for all servers.
 	 *
 	 * Returns a map keyed on the servername.
 	 * The value is another map which contains cachedump stats
 	 * with the cachekey as key and byte size and unix timestamp as value.
-	 * 
+	 *
 	 * @param slabNumber the item number of the cache dump
 	 * @return Stats map
 	 */
 	public Map statsCacheDump( int slabNumber, int limit ) {
 		return statsCacheDump( null, slabNumber, limit );
 	}
-	
-	/** 
+
+	/**
 	 * Retrieves stats for passed in servers (or all servers).
 	 *
 	 * Returns a map keyed on the servername.
 	 * The value is another map which contains cachedump stats
 	 * with the cachekey as key and byte size and unix timestamp as value.
-	 * 
+	 *
 	 * @param servers string array of servers to retrieve stats from, or all if this is null
 	 * @param slabNumber the item number of the cache dump
 	 * @return Stats map
@@ -1960,7 +1960,7 @@ public class MemcachedClient {
 	public Map statsCacheDump( String[] servers, int slabNumber, int limit ) {
 		return stats( servers, String.format( "stats cachedump %d %d\r\n", slabNumber, limit ), ITEM );
 	}
-		
+
 	private Map stats( String[] servers, String command, String lineStart ) {
 
 		if ( command == null || command.trim().equals( "" ) ) {
@@ -2008,7 +2008,7 @@ public class MemcachedClient {
 						log.debug( "++++ line: " + line );
 
 					if ( line.startsWith( lineStart ) ) {
-						String[] info = line.split( " ", 3 );						
+						String[] info = line.split( " ", 3 );
 						String key    = info[1];
 						String value  = info[2];
 
@@ -2074,20 +2074,20 @@ public class MemcachedClient {
 		}
 
 		private final class Connection {
-		
+
 			public List<ByteBuffer> incoming = new ArrayList<ByteBuffer>();
 			public ByteBuffer outgoing;
 			public SockIOPool.SockIO sock;
 			public SocketChannel channel;
 			private boolean isDone = false;
-			
+
 			public Connection( SockIOPool.SockIO sock, StringBuilder request ) throws IOException {
 				if ( log.isDebugEnabled() )
 					log.debug( "setting up connection to "+sock.getHost() );
-				
+
 				this.sock = sock;
 				outgoing = ByteBuffer.wrap( request.append( "\r\n" ).toString().getBytes() );
-				
+
 				channel = sock.getChannel();
 				if ( channel == null )
 					throw new IOException( "dead connection to: " + sock.getHost() );
@@ -2095,14 +2095,14 @@ public class MemcachedClient {
 				channel.configureBlocking( false );
 				channel.register( selector, SelectionKey.OP_WRITE, this );
 			}
-			
+
 			public void close() {
 				try {
 					if ( isDone ) {
 						// turn off non-blocking IO and return to pool
 						if ( log.isDebugEnabled() )
 							log.debug( "++++ gracefully closing connection to "+sock.getHost() );
-						
+
 						channel.configureBlocking( true );
 						sock.close();
 						return;
@@ -2111,7 +2111,7 @@ public class MemcachedClient {
 				catch ( IOException e ) {
 					log.warn( "++++ memcache: unexpected error closing normally" );
 				}
-				
+
 				try {
 					if ( log.isDebugEnabled() )
 						log.debug("forcefully closing connection to "+sock.getHost());
@@ -2121,12 +2121,12 @@ public class MemcachedClient {
 				}
 				catch ( IOException ignoreMe ) { }
 			}
-			
+
 			public boolean isDone() {
 				// if we know we're done, just say so
-				if ( isDone )         
+				if ( isDone )
 					return true;
-				
+
 				// else find out the hard way
 				int strPos = B_END.length-1;
 
@@ -2141,11 +2141,11 @@ public class MemcachedClient {
 
 					bi--;
 				}
-				
+
 				isDone = strPos < 0;
 				return isDone;
 			}
-			
+
 			public ByteBuffer getBuffer() {
 				int last = incoming.size()-1;
 				if ( last >= 0 && incoming.get( last ).hasRemaining() ) {
@@ -2157,18 +2157,18 @@ public class MemcachedClient {
 					return newBuf;
 				}
 			}
-			
+
 			public String toString() {
 				return "Connection to " + sock.getHost() + " with " + incoming.size() + " bufs; done is " + isDone;
 			}
 		}
-		
+
 		public void doMulti( boolean asString, Map<String, StringBuilder> sockKeys, String[] keys, Map<String, Object> ret ) {
-		
+
 			long timeRemaining = 0;
 			try {
 				selector = Selector.open();
-				
+
 				// get the sockets, flip them to non-blocking, and set up data
 				// structures
 				conns = new Connection[sockKeys.keySet().size()];
@@ -2187,7 +2187,7 @@ public class MemcachedClient {
 
 					conns[numConns++] = new Connection( sock, sockKeys.get( host ) );
 				}
-				
+
 				// the main select loop; ends when
 				// 1) we've received data from all the servers, or
 				// 2) we time out
@@ -2195,7 +2195,7 @@ public class MemcachedClient {
 
 				long timeout = pool.getMaxBusy();
 				timeRemaining = timeout;
-				
+
 				while ( numConns > 0 && timeRemaining > 0 ) {
 					int n = selector.select( Math.min( timeout,  5000 ) );
 					if ( n > 0 ) {
@@ -2212,7 +2212,7 @@ public class MemcachedClient {
 						// TODO:  This seems like a problem area that we need to figure out how to handle.
 						log.error( "selector timed out waiting for activity" );
 					}
-					
+
 					timeRemaining = timeout - (System.currentTimeMillis() - startTime);
 				}
 			}
@@ -2225,7 +2225,7 @@ public class MemcachedClient {
 			finally {
 				if ( log.isDebugEnabled() )
 					log.debug( "Disconnecting; numConns=" + numConns + "  timeRemaining=" + timeRemaining );
-				
+
 				// run through our conns and either return them to the pool
 				// or forcibly close them
 				try {
@@ -2233,13 +2233,13 @@ public class MemcachedClient {
 						selector.close();
 				}
 				catch ( IOException ignoreMe ) { }
-				
+
 				for ( Connection c : conns ) {
 					if ( c != null )
 						c.close();
 				}
 			}
-		
+
 			// Done!  Build the list of results and return them.  If we get
 			// here by a timeout, then some of the connections are probably
 			// not done.  But we'll return what we've got...
@@ -2254,38 +2254,38 @@ public class MemcachedClient {
 				}
 			}
 		}
-		
+
 		private void handleError( Throwable e, String[] keys ) {
 		    // if we have an errorHandler, use its hook
 		    if ( errorHandler != null )
 		        errorHandler.handleErrorOnGet( MemcachedClient.this, e, keys );
-		
+
 		    // exception thrown
 		    log.error( "++++ exception thrown while getting from cache on getMulti" );
 		    log.error( e.getMessage() );
 		}
-		
+
 		private void handleKey( SelectionKey key ) throws IOException {
 			if ( log.isDebugEnabled() )
 				log.debug( "handling selector op " + key.readyOps() + " for key " + key );
-			
+
 			if ( key.isReadable() )
 				readResponse( key );
 			else if ( key.isWritable() )
 				writeRequest( key );
 		}
-		
+
 		public void writeRequest( SelectionKey key ) throws IOException {
 			ByteBuffer buf = ((Connection) key.attachment()).outgoing;
 			SocketChannel sc = (SocketChannel)key.channel();
-			
+
 			if ( buf.hasRemaining() ) {
 				if ( log.isDebugEnabled() )
 				    log.debug( "writing " + buf.remaining() + "B to " + ((SocketChannel) key.channel()).socket().getInetAddress() );
 
 				sc.write( buf );
 			}
-			
+
 			if ( !buf.hasRemaining() ) {
 			    if ( log.isDebugEnabled() )
 			        log.debug( "switching to read mode for server " + ((SocketChannel)key.channel()).socket().getInetAddress() );
@@ -2293,7 +2293,7 @@ public class MemcachedClient {
 				key.interestOps( SelectionKey.OP_READ );
 			}
 		}
-		
+
 		public void readResponse( SelectionKey key ) throws IOException {
 			Connection conn = (Connection)key.attachment();
 			ByteBuffer buf = conn.getBuffer();
@@ -2301,7 +2301,7 @@ public class MemcachedClient {
 			if ( count > 0 ) {
 				if ( log.isDebugEnabled() )
 					log.debug( "read  " + count + " from " + conn.channel.socket().getInetAddress() );
-				
+
 				if ( conn.isDone() ) {
 					if ( log.isDebugEnabled() )
 						log.debug( "connection done to  " + conn.channel.socket().getInetAddress() );

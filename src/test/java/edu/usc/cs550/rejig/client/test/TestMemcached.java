@@ -13,14 +13,14 @@
  * You should have received a copy of the BSD License along with this
  * library.
  *
- * @author greg whalin <greg@meetup.com> 
+ * @author greg whalin <greg@meetup.com>
  */
-package com.meetup.memcached.test;
+package edu.usc.cs550.rejig.client.test;
 
-import com.meetup.memcached.*;
+import edu.usc.cs550.rejig.client.*;
 import org.apache.log4j.*;
 
-public class TestMemcached  {  
+public class TestMemcached  {
 	public static void main(String[] args) {
 		      // memcached should be running on port 11211 but NOT on 11212
 
@@ -29,7 +29,7 @@ public class TestMemcached  {
 		SockIOPool pool = SockIOPool.getInstance();
 		pool.setServers( servers );
 		pool.setFailover( true );
-		pool.setInitConn( 10 ); 
+		pool.setInitConn( 10 );
 		pool.setMinConn( 5 );
 		pool.setMaxConn( 250 );
 		pool.setMaintSleep( 30 );

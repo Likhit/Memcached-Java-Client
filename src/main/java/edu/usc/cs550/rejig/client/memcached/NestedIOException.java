@@ -13,16 +13,16 @@
  * You should have received a copy of the BSD License along with this
  * library.
  *
- * @author Kevin A. Burton <burton@peerfear.org> 
+ * @author Kevin A. Burton <burton@peerfear.org>
  */
-package com.meetup.memcached;
+package edu.usc.cs550.rejig.client;
 
 import java.io.*;
 
 /**
  * Bridge class to provide nested Exceptions with IOException which has
  * constructors that don't take Throwables.
- * 
+ *
  * @author <a href="mailto:burton@rojo.com">Kevin Burton</a>
  * @version 1.2
  */

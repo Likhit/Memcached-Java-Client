@@ -14,11 +14,11 @@
  * library.
  *
  * @author Kevin Burton
- * @author greg whalin <greg@meetup.com> 
+ * @author greg whalin <greg@meetup.com>
  */
-package com.meetup.memcached.test;
+package edu.usc.cs550.rejig.client.test;
 
-import com.meetup.memcached.*;
+import edu.usc.cs550.rejig.client.*;
 import java.util.*;
 import java.io.Serializable;
 
@@ -27,7 +27,7 @@ import org.apache.log4j.Logger;
 import org.apache.log4j.BasicConfigurator;
 
 public class UnitTests {
-	
+
 	// logger
 	private static Logger log =
 		Logger.getLogger( UnitTests.class.getName() );
@@ -55,7 +55,7 @@ public class UnitTests {
 		assert s.equals( input );
 		log.error( "+ store/retrieve String type test passed" );
     }
-    
+
     public static void test4() {
         mc.set( "foo", new Character( 'z' ) );
         Character c = (Character)mc.get( "foo" );
@@ -158,14 +158,14 @@ public class UnitTests {
         assert !mc.set( "foo", null );
 		log.error( "+ invalid data store [null] test passed" );
 	}
-    
+
 	public static void test17() {
         mc.set( "foo bar", Boolean.TRUE );
         Boolean b = (Boolean)mc.get( "foo bar" );
 		assert b.booleanValue();
 		log.error( "+ store/retrieve Boolean type test passed" );
 	}
-    
+
 	public static void test18() {
 		long i = 0;
 		mc.addOrIncr( "foo" ); // foo now == 0
@@ -188,35 +188,35 @@ public class UnitTests {
 			keys[i] = Integer.toString(i);
 			mc.set( keys[i], "value"+i );
 		}
-		
+
 		Map<String,Object> results = mc.getMulti( keys );
 		for ( int i=0; i<max; i++ ) {
 			assert results.get( keys[i]).equals( "value"+i );
 		}
 		log.error( "+ getMulti test passed" );
 	}
-	
+
 	public static void test20( int max, int skip, int start ) {
 		log.warn( String.format( "test 20 starting with start=%5d skip=%5d max=%7d", start, skip, max ) );
 		int numEntries = max/skip+1;
 		String[] keys = new String[ numEntries ];
 		byte[][] vals = new byte[ numEntries ][];
-		
+
 		int size = start;
 		for ( int i=0; i<numEntries; i++ ) {
 			keys[i] = Integer.toString( size );
 			vals[i] = new byte[size + 1];
 			for ( int j=0; j<size + 1; j++ )
 				vals[i][j] = (byte)j;
-			
+
 			mc.set( keys[i], vals[i] );
 			size += skip;
 		}
-		
+
 		Map<String,Object> results = mc.getMulti( keys );
 		for ( int i=0; i<numEntries; i++ )
 			assert Arrays.equals( (byte[])results.get( keys[i]), vals[i] );
-		
+
 		log.warn( String.format( "test 20 finished with start=%5d skip=%5d max=%7d", start, skip, max ) );
 	}
 
@@ -268,7 +268,7 @@ public class UnitTests {
 		test14();
 		for ( int t = 0; t < 2; t++ ) {
 			mc.setCompressEnable( ( t&1 ) == 1 );
-			
+
 			test1();
 			test2();
 			test3();
@@ -289,27 +289,27 @@ public class UnitTests {
 			test22();
 			test23();
 			test24();
-			
+
 			for ( int i = 0; i < 3; i++ )
 				test19();
-			
+
 			test20( 8191, 1, 0 );
 			test20( 8192, 1, 0 );
 			test20( 8193, 1, 0 );
-			
+
 			test20( 16384, 100, 0 );
 			test20( 17000, 128, 0 );
-			
+
 			test20( 128*1024, 1023, 0 );
 			test20( 128*1024, 1023, 1 );
 			test20( 128*1024, 1024, 0 );
 			test20( 128*1024, 1024, 1 );
-			
+
 			test20( 128*1024, 1023, 0 );
 			test20( 128*1024, 1023, 1 );
 			test20( 128*1024, 1024, 0 );
 			test20( 128*1024, 1024, 1 );
-			
+
 			test20( 900*1024, 32*1024, 0 );
 			test20( 900*1024, 32*1024, 1 );
 		}
@@ -322,7 +322,7 @@ public class UnitTests {
 	 * Command line args:
 	 * args[0] = number of threads to spawn
 	 * args[1] = number of runs per thread
-	 * args[2] = size of object to store 
+	 * args[2] = size of object to store
 	 *
 	 * @param args the command line arguments
 	 */
@@ -335,7 +335,7 @@ public class UnitTests {
 			System.err.println( "WARNING: assertions are disabled!" );
 			try { Thread.sleep( 3000 ); } catch ( InterruptedException e ) {}
 		}
-		
+
 		String[] serverlist = {
 			"192.168.1.50:1620",
 			"192.168.1.50:1621",
@@ -367,9 +367,9 @@ public class UnitTests {
 		runAlTests( mc );
 	}
 
-	/** 
-	 * Class for testing serializing of objects. 
-	 * 
+	/**
+	 * Class for testing serializing of objects.
+	 *
 	 * @author $Author: $
 	 * @version $Revision: $ $Date: $
 	 */

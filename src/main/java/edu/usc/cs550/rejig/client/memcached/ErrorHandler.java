@@ -19,7 +19,7 @@
  *
  * @author Dan Zivkovic <zivkovic@apple.com>
  */
-package com.meetup.memcached;
+package edu.usc.cs550.rejig.client;
 
 public interface ErrorHandler {
 

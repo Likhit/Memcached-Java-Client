@@ -17,24 +17,24 @@
  * with a custom class loader.  This will allow for the
  * deserialization of classes that are not visible to the system
  * class loader.
- * 
- * @author Vin Chawla <vin@tivo.com> 
+ *
+ * @author Vin Chawla <vin@tivo.com>
  */
-package com.meetup.memcached;
+package edu.usc.cs550.rejig.client;
 
 import java.util.*;
 import java.util.zip.*;
 import java.io.*;
 
-public class ContextObjectInputStream extends ObjectInputStream { 
+public class ContextObjectInputStream extends ObjectInputStream {
 
 	ClassLoader mLoader;
-    
+
 	public ContextObjectInputStream( InputStream in, ClassLoader loader ) throws IOException, SecurityException {
 		super( in );
 		mLoader = loader;
 	}
-	
+
 	protected Class resolveClass( ObjectStreamClass v ) throws IOException, ClassNotFoundException {
 		if ( mLoader == null )
 			return super.resolveClass( v );

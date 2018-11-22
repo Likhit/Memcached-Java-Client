@@ -13,11 +13,11 @@
  * You should have received a copy of the BSD License along with this
  * library.
  *
- * @author Greg Whalin <greg@meetup.com> 
+ * @author Greg Whalin <greg@meetup.com>
  */
-package com.meetup.memcached.test;
+package edu.usc.cs550.rejig.client.test;
 
-import com.meetup.memcached.*;
+import edu.usc.cs550.rejig.client.*;
 import java.util.*;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;

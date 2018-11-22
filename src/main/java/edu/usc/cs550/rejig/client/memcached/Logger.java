@@ -13,19 +13,19 @@
  * You should have received a copy of the BSD License along with this
  * library.
  *
- * @author Greg Whalin <greg@meetup.com> 
+ * @author Greg Whalin <greg@meetup.com>
  */
-package com.meetup.memcached;
+package edu.usc.cs550.rejig.client;
 
 import java.util.*;
 
-/** 
+/**
  * This is a generic logger class for use in logging.
  *
  * This can easily be swapped out for any other logging package in the main code.
  * For now, this is just a quick and dirty logger which will allow you to specify
  * log levels, but only wraps system.out.println.
- * 
+ *
  * @author Greg Whalin <greg@meetup.com>
  * @version 1.5
  */
@@ -59,12 +59,12 @@ public class Logger {
 		this.initialized = true;
 	}
 
-	/** 
-	 * Gets a Logger obj for given name and level. 
-	 * 
-	 * @param name 
-	 * @param level 
-	 * @return 
+	/**
+	 * Gets a Logger obj for given name and level.
+	 *
+	 * @param name
+	 * @param level
+	 * @return
 	 */
 	public static synchronized Logger getLogger( String name, int level ) {
 		Logger log = getLogger( name );
@@ -74,12 +74,12 @@ public class Logger {
 		return log;
 	}
 
-	/** 
+	/**
 	 * Gets a Logger obj for given name
-	 * and sets default level. 
-	 * 
-	 * @param name 
-	 * @return 
+	 * and sets default level.
+	 *
+	 * @param name
+	 * @return
 	 */
 	public static synchronized Logger getLogger( String name ) {
 
@@ -95,11 +95,11 @@ public class Logger {
 		return log;
 	}
 
-	/** 
-	 * logs mesg to std out and prints stack trace if exception passed in 
-	 * 
-	 * @param mesg 
-	 * @param ex 
+	/**
+	 * logs mesg to std out and prints stack trace if exception passed in
+	 *
+	 * @param mesg
+	 * @param ex
 	 */
 	private void log( String mesg, Throwable ex ) {
 		System.out.println( name + " " + new Date() + " - " + mesg );
@@ -107,11 +107,11 @@ public class Logger {
 			ex.printStackTrace( System.out );
 	}
 
-	/** 
-	 * logs a debug mesg 
-	 * 
-	 * @param mesg 
-	 * @param ex 
+	/**
+	 * logs a debug mesg
+	 *
+	 * @param mesg
+	 * @param ex
 	 */
 	public void debug( String mesg, Throwable ex ) {
 		if ( this.level > LEVEL_DEBUG )
@@ -127,12 +127,12 @@ public class Logger {
 	public boolean isDebugEnabled() {
 		return this.level <= LEVEL_DEBUG;
 	}
-	
-	/** 
-	 * logs info mesg 
-	 * 
-	 * @param mesg 
-	 * @param ex 
+
+	/**
+	 * logs info mesg
+	 *
+	 * @param mesg
+	 * @param ex
 	 */
 	public void info( String mesg, Throwable ex ) {
 		if ( this.level > LEVEL_INFO )
@@ -148,12 +148,12 @@ public class Logger {
 	public boolean isInfoEnabled() {
 		return this.level <= LEVEL_INFO;
 	}
-	
-	/** 
-	 * logs warn mesg 
-	 * 
-	 * @param mesg 
-	 * @param ex 
+
+	/**
+	 * logs warn mesg
+	 *
+	 * @param mesg
+	 * @param ex
 	 */
 	public void warn( String mesg, Throwable ex ) {
 		if ( this.level > LEVEL_WARN )
@@ -166,11 +166,11 @@ public class Logger {
 		warn( mesg, null );
 	}
 
-	/** 
-	 * logs error mesg 
-	 * 
-	 * @param mesg 
-	 * @param ex 
+	/**
+	 * logs error mesg
+	 *
+	 * @param mesg
+	 * @param ex
 	 */
 	public void error( String mesg, Throwable ex ) {
 		if ( this.level > LEVEL_ERROR )
@@ -183,11 +183,11 @@ public class Logger {
 		error( mesg, null );
 	}
 
-	/** 
+	/**
 	 * logs fatal mesg
-	 * 
-	 * @param mesg 
-	 * @param ex 
+	 *
+	 * @param mesg
+	 * @param ex
 	 */
 	public void fatal( String mesg, Throwable ex ) {
 		if ( this.level > LEVEL_FATAL )
