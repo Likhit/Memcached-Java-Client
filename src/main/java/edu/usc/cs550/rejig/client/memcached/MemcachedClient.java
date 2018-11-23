@@ -17,7 +17,11 @@
  */
 package edu.usc.cs550.rejig.client;
 
+import edu.usc.cs550.rejig.interfaces.Fragment;
+import edu.usc.cs550.rejig.interfaces.RejigConfig;
+
 import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.*;
 import java.nio.*;
 import java.net.InetAddress;
@@ -208,10 +212,10 @@ public class MemcachedClient {
 	private String defaultEncoding;
 
 	// pool instance
-	private SockIOPool pool;
+	private AtomicReference<SockIOPool> currentPool;
 
 	// which pool to use
-	private String poolName;
+	private String poolNamePrefix;
 
 	// optional passed in classloader
 	private ClassLoader classLoader;
@@ -223,17 +227,19 @@ public class MemcachedClient {
 	 * Creates a new instance of MemCachedClient.
 	 */
 	public MemcachedClient() {
+		this.poolNamePrefix = "default";
 		init();
 	}
 
 	/**
 	 * Creates a new instance of MemCachedClient
-	 * accepting a passed in pool name.
+	 * with the specified pool name as a prefix appended
+	 * to the name of the SockIOPool created.
 	 *
-	 * @param poolName name of SockIOPool
+	 * @param poolNamePrefix prefix to name of SockIOPool
 	 */
-	public MemcachedClient( String poolName ) {
-		this.poolName = poolName;
+	public MemcachedClient( String poolNamePrefix ) {
+		this.poolNamePrefix = poolNamePrefix;
 		init();
 	}
 
@@ -265,16 +271,16 @@ public class MemcachedClient {
 	/**
 	 * Creates a new instance of MemCacheClient but
 	 * acceptes a passed in ClassLoader, ErrorHandler,
-	 * and SockIOPool name.
+	 * and SockIOPool name prefix.
 	 *
 	 * @param classLoader ClassLoader object.
 	 * @param errorHandler ErrorHandler object.
-	 * @param poolName SockIOPool name
+	 * @param poolNamePrefix SockIOPool name's prefix.
 	 */
-	public MemcachedClient( ClassLoader classLoader, ErrorHandler errorHandler, String poolName ) {
+	public MemcachedClient( ClassLoader classLoader, ErrorHandler errorHandler, String poolNamePrefix ) {
 		this.classLoader  = classLoader;
 		this.errorHandler = errorHandler;
-		this.poolName     = poolName;
+		this.poolNamePrefix = poolNamePrefix;
 		init();
 	}
 
@@ -289,10 +295,48 @@ public class MemcachedClient {
 		this.compressEnable     = true;
 		this.compressThreshold  = COMPRESS_THRESH;
 		this.defaultEncoding    = "UTF-8";
-		this.poolName           = ( this.poolName == null ) ? "default" : this.poolName;
+	}
 
-		// get a pool instance to work with for the life of this instance
-		this.pool               = SockIOPool.getInstance( poolName );
+  /**
+	 * Create and initialize a new SockIOPool for the given
+	 * config, and make the client use the new pool.
+	 */
+	private SockIOPool createSockIOPool(RejigConfig config) {
+		String poolName = String.format("%s-%d", this.poolNamePrefix, config.getId());
+		SockIOPool pool = SockIOPool.getInstance(poolName);
+		pool.setRejigConfig(config);
+		pool.initialize();
+		return pool;
+	}
+
+	/**
+	 * Atomically sets the current SockIOPool to the new value.
+	 * If the set was successful, it shuts down the old pool.
+	 * If the set failed, it retries infinitely with
+	 * exponential backoff.
+	 */
+	private void compareAndSetSockIOPool(SockIOPool oldPool, SockIOPool newPool) {
+		long sleepMillis = 2000;
+		while (true) {
+			boolean ret = currentPool.compareAndSet(oldPool, newPool);
+			if (ret) {
+				oldPool.shutDown();
+				break;
+			}
+			try {
+				Thread.sleep(sleepMillis);
+				sleepMillis *= 2;
+			} catch (InterruptedException e) {
+				log.warn("++++ Backoff sleep while setting SockIOPool interrupted.");
+			}
+		}
+	}
+
+	/**
+	 * Returns the SockIOPool currently being used by the client.
+	 */
+	public SockIOPool getSockIOPool() {
+		return currentPool.get();
 	}
 
 	/**
@@ -439,7 +483,8 @@ public class MemcachedClient {
 		}
 
 		// get SockIO obj from hash or from key
-		SockIOPool.SockIO sock = pool.getSock( key, hashCode );
+		SockIOPool pool = currentPool.get();
+		SockIOPool.SockIO sock = pool.getSockAndFragmentId( key, hashCode ).sock();
 
 		// return false if unable to get SockIO obj
 		if ( sock == null ) {
@@ -697,7 +742,8 @@ public class MemcachedClient {
 		}
 
 		// get SockIO obj
-		SockIOPool.SockIO sock = pool.getSock( key, hashCode );
+		SockIOPool pool = currentPool.get();
+		SockIOPool.SockIO sock = pool.getSockAndFragmentId( key, hashCode ).sock();
 
 		if ( sock == null ) {
 			if ( errorHandler != null )
@@ -1133,7 +1179,8 @@ public class MemcachedClient {
 		}
 
 		// get SockIO obj for given cache key
-		SockIOPool.SockIO sock = pool.getSock( key, hashCode );
+		SockIOPool pool = currentPool.get();
+		SockIOPool.SockIO sock = pool.getSockAndFragmentId( key, hashCode ).sock();
 
 		if ( sock == null ) {
 			if ( errorHandler != null )
@@ -1273,7 +1320,8 @@ public class MemcachedClient {
 		}
 
 		// get SockIO obj using cache key
-		SockIOPool.SockIO sock = pool.getSock( key, hashCode );
+		SockIOPool pool = currentPool.get();
+		SockIOPool.SockIO sock = pool.getSockAndFragmentId( key, hashCode ).sock();
 
 	    if ( sock == null ) {
 			if ( errorHandler != null )
@@ -1555,7 +1603,8 @@ public class MemcachedClient {
 			}
 
 			// get SockIO obj from cache key
-			SockIOPool.SockIO sock = pool.getSock( cleanKey, hash );
+			SockIOPool pool = currentPool.get();
+			SockIOPool.SockIO sock = pool.getSockAndFragmentId( cleanKey, hash ).sock();
 
 			if ( sock == null ) {
 				if ( errorHandler != null )
@@ -1779,15 +1828,21 @@ public class MemcachedClient {
 
 		// get SockIOPool instance
 		// return false if unable to get SockIO obj
-		if ( pool == null ) {
+		if ( currentPool == null || currentPool.get() == null ) {
 			log.error( "++++ unable to get SockIOPool instance" );
 			return false;
 		}
 
 		// get all servers and iterate over them
-		servers = ( servers == null )
-			? pool.getServers()
-			: servers;
+		SockIOPool pool = currentPool.get();
+		if (servers == null) {
+			RejigConfig config = pool.getRejigConfig();
+			servers = new String[config.getFragmentCount()];
+			int i = 0;
+			for (Fragment f : config.getFragmentList()) {
+				servers[i++] = f.getAddress();
+			}
+		}
 
 		// if no servers, then return early
 		if ( servers == null || servers.length <= 0 ) {
@@ -1969,9 +2024,15 @@ public class MemcachedClient {
 		}
 
 		// get all servers and iterate over them
-		servers = (servers == null)
-			? pool.getServers()
-			: servers;
+		SockIOPool pool = currentPool.get();
+		if (servers == null) {
+			RejigConfig config = pool.getRejigConfig();
+			servers = new String[config.getFragmentCount()];
+			int i = 0;
+			for (Fragment f : config.getFragmentList()) {
+				servers[i++] = f.getAddress();
+			}
+		}
 
 		// if no servers, then return early
 		if ( servers == null || servers.length <= 0 ) {
@@ -2173,6 +2234,7 @@ public class MemcachedClient {
 				// structures
 				conns = new Connection[sockKeys.keySet().size()];
 				numConns = 0;
+				SockIOPool pool = currentPool.get();
 				for ( Iterator<String> i = sockKeys.keySet().iterator(); i.hasNext(); ) {
 					// get SockIO obj from hostname
 					String host = i.next();

@@ -16,6 +16,9 @@
  * @author greg whalin <greg@meetup.com>
  */
 package edu.usc.cs550.rejig.client;
+import edu.usc.cs550.rejig.interfaces.Fragment;
+import edu.usc.cs550.rejig.interfaces.RejigConfig;
+
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -134,28 +137,16 @@ public class SockIOPool {
 	private static Map<String,SockIOPool> pools =
 		new HashMap<String,SockIOPool>();
 
-	// avoid recurring construction
-	private static ThreadLocal<MessageDigest> MD5 = new ThreadLocal<MessageDigest>() {
-		@Override
-		protected MessageDigest initialValue() {
-			try {
-				return MessageDigest.getInstance( "MD5" );
-			}
-			catch ( NoSuchAlgorithmException e ) {
-				log.error( "++++ no md5 algorithm found" );
-				throw new IllegalStateException( "++++ no md5 algorythm found");
-			}
-		}
-	};
-
 	// Constants
 	private static final Integer ZERO       = new Integer( 0 );
-	public static final int NATIVE_HASH     = 0;				// native String.hashCode();
-	public static final int OLD_COMPAT_HASH = 1;				// original compatibility hashing algorithm (works with other clients)
-	public static final int NEW_COMPAT_HASH = 2;				// new CRC32 based compatibility hashing algorithm (works with other clients)
-	public static final int CONSISTENT_HASH = 3;				// MD5 Based -- Stops thrashing when a server added or removed
-
 	public static final long MAX_RETRY_DELAY = 10 * 60 * 1000;  // max of 10 minute delay for fall off
+
+	// Hashing algorithm to use to select the fragment to assign a key to.
+	public static enum FragmentHashingAlgo {
+		NATIVE_HASH,			// native String.hashCode();
+		OLD_COMPAT_HASH,	// original compatibility hashing algorithm (works with other clients)
+		NEW_COMPAT_HASH		// new CRC32 based compatibility hashing algorithm (works with other clients)
+	}
 
 	// Pool data
 	private MaintThread maintThread;
@@ -176,18 +167,13 @@ public class SockIOPool {
 	private boolean failover          = true;				// default to failover in event of cache server dead
 	private boolean failback          = true;				// only used if failover is also set ... controls putting a dead server back into rotation
 	private boolean nagle             = false;				// enable/disable Nagle's algorithm
-	private int hashingAlg 		      = NATIVE_HASH;		// default to using the native hash as it is the fastest
+	private FragmentHashingAlgo hashingAlg = FragmentHashingAlgo.NATIVE_HASH;		// default to using the native hash as it is the fastest
 
 	// locks
 	private final ReentrantLock hostDeadLock = new ReentrantLock();
 
 	// list of all servers
-	private String[] servers;
-	private Integer[] weights;
-	private Integer totalWeight = 0;
-
-	private List<String> buckets;
-	private TreeMap<Long,String> consistentBuckets;
+	private RejigConfig config;
 
 	// dead server map
 	private Map<String,Date> hostDead;
@@ -220,45 +206,18 @@ public class SockIOPool {
 	}
 
 	/**
-	 * Single argument version of factory used for back compat.
-	 * Simply creates a pool named "default".
+	 * Sets the RejigConfig containing the list of all servers.
 	 *
-	 * @return instance of SockIOPool
+	 * @param config RejigConfig object
 	 */
-	public static SockIOPool getInstance() {
-		return getInstance( "default" );
-	}
+	public void setRejigConfig( RejigConfig config ) { this.config = config; }
 
 	/**
-	 * Sets the list of all cache servers.
+	 * Returns the current RejigConfig containing the list of all servers.
 	 *
-	 * @param servers String array of servers [host:port]
+	 * @return RejigConfig object
 	 */
-	public void setServers( String[] servers ) { this.servers = servers; }
-
-	/**
-	 * Returns the current list of all cache servers.
-	 *
-	 * @return String array of servers [host:port]
-	 */
-	public String[] getServers() { return this.servers; }
-
-	/**
-	 * Sets the list of weights to apply to the server list.
-	 *
-	 * This is an int array with each element corresponding to an element<br/>
-	 * in the same position in the server String array.
-	 *
-	 * @param weights Integer array of weights
-	 */
-	public void setWeights( Integer[] weights ) { this.weights = weights; }
-
-	/**
-	 * Returns the current list of weights.
-	 *
-	 * @return int array of weights
-	 */
-	public Integer[] getWeights() { return this.weights; }
+	public RejigConfig getRejigConfig() { return this.config; }
 
 	/**
 	 * Sets the initial number of connections per server in the available pool.
@@ -453,20 +412,20 @@ public class SockIOPool {
 	 *
 	 * The types are as follows.
 	 *
-	 * SockIOPool.NATIVE_HASH (0)     - native String.hashCode() - fast (cached) but not compatible with other clients
-	 * SockIOPool.OLD_COMPAT_HASH (1) - original compatibility hashing alg (works with other clients)
-	 * SockIOPool.NEW_COMPAT_HASH (2) - new CRC32 based compatibility hashing algorithm (fast and works with other clients)
+	 * SockIOPool.FragmentHashingAlgo.NATIVE_HASH (0)     - native String.hashCode() - fast (cached) but not compatible with other clients
+	 * SockIOPool.FragmentHashingAlgo.OLD_COMPAT_HASH (1) - original compatibility hashing alg (works with other clients)
+	 * SockIOPool.FragmentHashingAlgo.NEW_COMPAT_HASH (2) - new CRC32 based compatibility hashing algorithm (fast and works with other clients)
 	 *
 	 * @param alg int value representing hashing algorithm
 	 */
-	public void setHashingAlg( int alg ) { this.hashingAlg = alg; }
+	public void setHashingAlg(FragmentHashingAlgo alg) { this.hashingAlg = alg; }
 
 	/**
 	 * Returns current status of customHash flag
 	 *
 	 * @return true/false
 	 */
-	public int getHashingAlg() { return this.hashingAlg; }
+	public FragmentHashingAlgo getHashingAlg() { return this.hashingAlg; }
 
 	/**
 	 * Internal private hashing method.
@@ -507,24 +466,6 @@ public class SockIOPool {
 	}
 
 	/**
-	 * Internal private hashing method.
-	 *
-	 * MD5 based hash algorithm for use in the consistent
-	 * hashing approach.
-	 *
-	 * @param key
-	 * @return
-	 */
-	private static long md5HashingAlg( String key ) {
-		MessageDigest md5 = MD5.get();
-		md5.reset();
-		md5.update( key.getBytes() );
-		byte[] bKey = md5.digest();
-		long res = ((long)(bKey[3]&0xFF) << 24) | ((long)(bKey[2]&0xFF) << 16) | ((long)(bKey[1]&0xFF) << 8) | (long)(bKey[0]&0xFF);
-		return res;
-	}
-
-	/**
 	 * Returns a bucket to check for a given key.
 	 *
 	 * @param key String key cache is stored under
@@ -533,9 +474,6 @@ public class SockIOPool {
 	private long getHash( String key, Integer hashCode ) {
 
 		if ( hashCode != null ) {
-			if ( hashingAlg == CONSISTENT_HASH )
-				return hashCode.longValue() & 0xffffffffL;
-			else
 				return hashCode.longValue();
 		}
 		else {
@@ -546,11 +484,9 @@ public class SockIOPool {
 					return origCompatHashingAlg( key );
 				case NEW_COMPAT_HASH:
 					return newCompatHashingAlg( key );
-				case CONSISTENT_HASH:
-					return md5HashingAlg( key );
 				default:
 					// use the native hash as a default
-					hashingAlg = NATIVE_HASH;
+					hashingAlg = FragmentHashingAlgo.NATIVE_HASH;
 					return (long)key.hashCode();
 			}
 		}
@@ -559,31 +495,9 @@ public class SockIOPool {
 	private long getBucket( String key, Integer hashCode ) {
 		long hc = getHash( key, hashCode );
 
-		if ( this.hashingAlg == CONSISTENT_HASH ) {
-			return findPointFor( hc );
-		}
-		else {
-			long bucket = hc % buckets.size();
-			if ( bucket < 0 ) bucket *= -1;
-			return bucket;
-		}
-	}
-
-	/**
-	 * Gets the first available key equal or above the given one, if none found,
-	 * returns the first k in the bucket
-	 * @param k key
-	 * @return
-	 */
-	private Long findPointFor( Long hv ) {
-		// this works in java 6, but still want to release support for java5
-		//Long k = this.consistentBuckets.ceilingKey( hv );
-		//return ( k == null ) ? this.consistentBuckets.firstKey() : k;
-
-		SortedMap<Long,String> tmap =
-			this.consistentBuckets.tailMap( hv );
-
-		return ( tmap.isEmpty() ) ? this.consistentBuckets.firstKey() : tmap.firstKey();
+		long bucket = hc % config.getFragmentCount();
+		if ( bucket < 0 ) bucket *= -1;
+		return bucket;
 	}
 
 	/**
@@ -595,7 +509,6 @@ public class SockIOPool {
 
 			// check to see if already initialized
 			if ( initialized
-					&& ( buckets != null || consistentBuckets != null )
 					&& ( availPool != null )
 					&& ( busyPool != null ) ) {
 				log.error( "++++ trying to initialize an already initialized pool" );
@@ -603,8 +516,8 @@ public class SockIOPool {
 			}
 
 			// pools
-			availPool   = new HashMap<String,Map<SockIO,Long>>( servers.length * initConn );
-			busyPool    = new HashMap<String,Map<SockIO,Long>>( servers.length * initConn );
+			availPool   = new HashMap<String,Map<SockIO,Long>>( config.getFragmentCount() * initConn );
+			busyPool    = new HashMap<String,Map<SockIO,Long>>( config.getFragmentCount() * initConn );
 			deadPool    = new IdentityHashMap<SockIO,Integer>();
 
 			hostDeadDur = new HashMap<String,Long>();
@@ -620,16 +533,13 @@ public class SockIOPool {
 
 			// if servers is not set, or it empty, then
 			// throw a runtime exception
-			if ( servers == null || servers.length <= 0 ) {
+			if ( config == null || config.getFragmentCount() <= 0 ) {
 				log.error( "++++ trying to initialize with no servers" );
 				throw new IllegalStateException( "++++ trying to initialize with no servers" );
 			}
 
 			// initalize our internal hashing structures
-			if ( this.hashingAlg == CONSISTENT_HASH )
-				populateConsistentBuckets();
-			else
-				populateBuckets();
+			populateBuckets();
 
 			// mark pool as initialized
 			this.initialized = true;
@@ -644,93 +554,22 @@ public class SockIOPool {
 		if ( log.isDebugEnabled() )
 			log.debug( "++++ initializing internal hashing structure for consistent hashing" );
 
-		// store buckets in tree map
-		this.buckets = new ArrayList<String>();
-
-		for ( int i = 0; i < servers.length; i++ ) {
-			if ( this.weights != null && this.weights.length > i ) {
-				for ( int k = 0; k < this.weights[i].intValue(); k++ ) {
-					this.buckets.add( servers[i] );
-					if ( log.isDebugEnabled() )
-						log.debug( "++++ added " + servers[i] + " to server bucket" );
-				}
-			}
-			else {
-				this.buckets.add( servers[i] );
-				if ( log.isDebugEnabled() )
-					log.debug( "++++ added " + servers[i] + " to server bucket" );
-			}
-
+		for ( int i = 0; i < config.getFragmentCount(); i++ ) {
+			String server = config.getFragment(i).getAddress();
 			// create initial connections
 			if ( log.isDebugEnabled() )
-				log.debug( "+++ creating initial connections (" + initConn + ") for host: " + servers[i] );
+				log.debug( "+++ creating initial connections (" + initConn + ") for host: " + server);
 
 			for ( int j = 0; j < initConn; j++ ) {
-				SockIO socket = createSocket( servers[i] );
+				SockIO socket = createSocket( server );
 				if ( socket == null ) {
-					log.error( "++++ failed to create connection to: " + servers[i] + " -- only " + j + " created." );
+					log.error( "++++ failed to create connection to: " + server + " -- only " + j + " created." );
 					break;
 				}
 
-				addSocketToPool( availPool, servers[i], socket );
+				addSocketToPool( availPool, server, socket );
 				if ( log.isDebugEnabled() )
-					log.debug( "++++ created and added socket: " + socket.toString() + " for host " + servers[i] );
-			}
-		}
-	}
-
-	private void populateConsistentBuckets() {
-		if ( log.isDebugEnabled() )
-			log.debug( "++++ initializing internal hashing structure for consistent hashing" );
-
-		// store buckets in tree map
-		this.consistentBuckets = new TreeMap<Long,String>();
-
-		MessageDigest md5 = MD5.get();
-		if ( this.totalWeight <= 0 && this.weights !=  null ) {
-			for ( int i = 0; i < this.weights.length; i++ )
-				this.totalWeight += ( this.weights[i] == null ) ? 1 : this.weights[i];
-		}
-		else if ( this.weights == null ) {
-			this.totalWeight = this.servers.length;
-		}
-
-		for ( int i = 0; i < servers.length; i++ ) {
-			int thisWeight = 1;
-			if ( this.weights != null && this.weights[i] != null )
-				thisWeight = this.weights[i];
-
-			double factor = Math.floor( ((double)(40 * this.servers.length * thisWeight)) / (double)this.totalWeight );
-
-			for ( long j = 0; j < factor; j++ ) {
-				byte[] d = md5.digest( ( servers[i] + "-" + j ).getBytes() );
-				for ( int h = 0 ; h < 4; h++ ) {
-					Long k =
-						  ((long)(d[3+h*4]&0xFF) << 24)
-						| ((long)(d[2+h*4]&0xFF) << 16)
-						| ((long)(d[1+h*4]&0xFF) << 8)
-						| ((long)(d[0+h*4]&0xFF));
-
-					consistentBuckets.put( k, servers[i] );
-					if ( log.isDebugEnabled() )
-						log.debug( "++++ added " + servers[i] + " to server bucket" );
-				}
-			}
-
-			// create initial connections
-			if ( log.isDebugEnabled() )
-				log.debug( "+++ creating initial connections (" + initConn + ") for host: " + servers[i] );
-
-			for ( int j = 0; j < initConn; j++ ) {
-				SockIO socket = createSocket( servers[i] );
-				if ( socket == null ) {
-					log.error( "++++ failed to create connection to: " + servers[i] + " -- only " + j + " created." );
-					break;
-				}
-
-				addSocketToPool( availPool, servers[i], socket );
-				if ( log.isDebugEnabled() )
-					log.debug( "++++ created and added socket: " + socket.toString() + " for host " + servers[i] );
+					log.debug( "++++ created and added socket: " + socket.toString() + " for host " + server );
 			}
 		}
 	}
@@ -843,7 +682,7 @@ public class SockIOPool {
 	 * @return
 	 */
 	public String getHost( String key, Integer hashcode ) {
-		SockIO socket = getSock( key, hashcode );
+		SockIO socket = getSockAndFragmentId( key, hashcode ).sock();
 		String host = socket.getHost();
 		socket.close();
 		return host;
@@ -856,22 +695,24 @@ public class SockIOPool {
 	 * @param key hashcode for cache key
 	 * @return SockIO obj connected to server
 	 */
-	public SockIO getSock( String key ) {
-		return getSock( key, null );
+	public SockAndFragmentId getSockAndFragmentId( String key ) {
+		return getSockAndFragmentId( key, null );
 	}
 
 	/**
-	 * Returns appropriate SockIO object given
-	 * string cache key and optional hashcode.
+	 * Returns appropriate SockAndFragmentId object
+	 * containing the SockIO object given string cache
+	 * key and optional hashcode, and the fragment id
+	 * of the fragment containing the host.
 	 *
 	 * Trys to get SockIO from pool.  Fails over
 	 * to additional pools in event of server failure.
 	 *
 	 * @param key hashcode for cache key
 	 * @param hashCode if not null, then the int hashcode to use
-	 * @return SockIO obj connected to server
+	 * @return SockAndFragmentId obj connected to server
 	 */
-	public SockIO getSock( String key, Integer hashCode ) {
+	public SockAndFragmentId getSockAndFragmentId( String key, Integer hashCode ) {
 
 		if ( log.isDebugEnabled() )
 			log.debug( "cache socket pick " + key + " " + hashCode );
@@ -882,17 +723,13 @@ public class SockIOPool {
 		}
 
 		// if no servers return null
-		if ( ( this.hashingAlg == CONSISTENT_HASH && consistentBuckets.size() == 0 )
-				|| ( buckets != null && buckets.size() == 0 ) )
+		if ( config != null && config.getFragmentCount() == 0 )
 			return null;
 
 		// if only one server, return it
-		if ( ( this.hashingAlg == CONSISTENT_HASH && consistentBuckets.size() == 1 )
-				|| ( buckets != null && buckets.size() == 1 ) ) {
+		if ( config != null && config.getFragmentCount() == 1 ) {
 
-			SockIO sock = ( this.hashingAlg == CONSISTENT_HASH )
-				? getConnection( consistentBuckets.get( consistentBuckets.firstKey() ) )
-				: getConnection( buckets.get( 0 ) );
+			SockIO sock = getConnection( config.getFragment( 0 ).getAddress() );
 
 			if ( sock != null && sock.isConnected() ) {
 				if ( aliveCheck ) {
@@ -910,23 +747,23 @@ public class SockIOPool {
 				}
 			}
 
-			return sock;
+			return new SockAndFragmentId(
+				sock, config.getFragment(0).getId());
 		}
 
 		// from here on, we are working w/ multiple servers
 		// keep trying different servers until we find one
 		// making sure we only try each server one time
-		Set<String> tryServers = new HashSet<String>( Arrays.asList( servers ) );
+		Set<Fragment> tryServers = new HashSet<Fragment>( config.getFragmentList() );
 
 		// get initial bucket
 		long bucket = getBucket( key, hashCode );
-		String server = ( this.hashingAlg == CONSISTENT_HASH )
-			? consistentBuckets.get( bucket )
-			: buckets.get( (int)bucket );
+		Fragment fragment = config.getFragment( (int)bucket );
 
 		while ( !tryServers.isEmpty() ) {
 
 			// try to get socket from bucket
+			String server = fragment.getAddress();
 			SockIO sock = getConnection( server );
 
 			if ( log.isDebugEnabled() )
@@ -935,7 +772,7 @@ public class SockIOPool {
 			if ( sock != null && sock.isConnected() ) {
 				if ( aliveCheck ) {
 					if ( sock.isAlive() ) {
-						return sock;
+						return new SockAndFragmentId(sock, fragment.getId());
 					}
 					else {
 						sock.close();
@@ -944,7 +781,7 @@ public class SockIOPool {
 					}
 				}
 				else {
-					return sock;
+					return new SockAndFragmentId(sock, fragment.getId());
 				}
 			}
 			else {
@@ -959,7 +796,7 @@ public class SockIOPool {
 				return null;
 
 			// log that we tried
-			tryServers.remove( server );
+			tryServers.remove( fragment );
 
 			if ( tryServers.isEmpty() )
 				break;
@@ -968,16 +805,14 @@ public class SockIOPool {
 			// then we try again by adding an incrementer to the
 			// current key and then rehashing
 			int rehashTries = 0;
-			while ( !tryServers.contains( server ) ) {
+			while ( !tryServers.contains( fragment ) ) {
 
 				String newKey = String.format( "%s%s", rehashTries, key );
 				if ( log.isDebugEnabled() )
 					log.debug( "rehashing with: " + newKey );
 
 				bucket = getBucket( newKey, null );
-				server = ( this.hashingAlg == CONSISTENT_HASH )
-					? consistentBuckets.get( bucket )
-					: buckets.get( (int)bucket );
+				fragment = config.getFragment( (int)bucket );
 
 				rehashTries++;
 			}
@@ -1238,8 +1073,6 @@ public class SockIOPool {
 			closePool( busyPool );
 			availPool         = null;
 			busyPool          = null;
-			buckets           = null;
-			consistentBuckets = null;
 			hostDeadDur       = null;
 			hostDead          = null;
 			maintThread       = null;
@@ -1898,6 +1731,24 @@ public class SockIOPool {
 			finally {
 				super.finalize();
 			}
+		}
+	}
+
+	public static class SockAndFragmentId {
+		private SockIO sock;
+		private int fragmentId;
+
+		SockAndFragmentId(SockIO sock, int id) {
+			this.sock = sock;
+			this.fragmentId = id;
+		}
+
+		public SockIO sock() {
+			return sock;
+		}
+
+		public int fragmentId() {
+			return fragmentId;
 		}
 	}
 }
