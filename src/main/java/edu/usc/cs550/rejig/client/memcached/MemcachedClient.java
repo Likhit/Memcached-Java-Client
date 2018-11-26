@@ -174,6 +174,8 @@ public class MemcachedClient {
 	private static final String NOTSTORED    = "NOT_STORED";	// data not stored
 	private static final String OK           = "OK";			// success
 	private static final String END          = "END";			// end of data from server
+	private static final String REFRESH_AND_RETRY = "REFRESH_AND_RETRY";	// client's config stale.
+	private static final String REJIG_CONFIG_STORAGE_KEY = "REJIG_CONFIG_STORAGE_KEY";	// The identifier returned in the value line when REFRESH_AND_RETRY error occurs.
 
 	private static final String ERROR        = "ERROR";			// invalid command name from client
 	private static final String CLIENT_ERROR = "CLIENT_ERROR";	// client error in input line - invalid protocol
@@ -297,7 +299,7 @@ public class MemcachedClient {
 		this.defaultEncoding    = "UTF-8";
 	}
 
-  /**
+	/**
 	 * Create and initialize a new SockIOPool for the given
 	 * config, and make the client use the new pool.
 	 */
@@ -462,8 +464,12 @@ public class MemcachedClient {
 	 * @param expiry when to expire the record.
 	 * @return <code>true</code>, if the data was deleted successfully
 	 */
-	public boolean delete( String key, Integer hashCode, Date expiry ) {
+	public boolean delete(
+		final String originalKey,
+		final Integer hashCode,
+		final Date expiry ) {
 
+		String key = originalKey;
 		if ( key == null ) {
 			log.error( "null value for key passed to delete()" );
 			return false;
@@ -484,6 +490,7 @@ public class MemcachedClient {
 
 		// get SockIO obj from hash or from key
 		SockIOPool pool = currentPool.get();
+		int client_config_id = pool.getRejigConfig().getId();
 		SockIOPool.SockIO sock = pool.getSockAndFragmentId( key, hashCode ).sock();
 
 		// return false if unable to get SockIO obj
@@ -494,7 +501,10 @@ public class MemcachedClient {
 		}
 
 		// build command
-		StringBuilder command = new StringBuilder( "delete " ).append( key );
+		StringBuilder command = new StringBuilder( "rj " )
+			.append( client_config_id )
+			.append( " delete" )
+			.append( key );
 		if ( expiry != null )
 			command.append( " " + expiry.getTime() / 1000 );
 
@@ -506,7 +516,11 @@ public class MemcachedClient {
 
 			// if we get appropriate response back, then we return true
 			String line = sock.readLine();
-			if ( DELETED.equals( line ) ) {
+			if ( REFRESH_AND_RETRY.equals(line) ) {
+				handleRefreshAndRetry(pool, sock);
+				return delete(originalKey, hashCode, expiry);
+			}
+			else if ( DELETED.equals( line ) ) {
 				if ( log.isInfoEnabled() )
 					log.info( "++++ deletion of key: " + key + " from cache was a success" );
 
@@ -716,8 +730,15 @@ public class MemcachedClient {
 	 * @param asString store this object as a string?
 	 * @return true/false indicating success
 	 */
-	private boolean set( String cmdname, String key, Object value, Date expiry, Integer hashCode, boolean asString ) {
+	private boolean set(
+		final String cmdname,
+		final String originalKey,
+		final Object value,
+		final Date originalExpiry,
+		final Integer hashCode,
+		final boolean asString ) {
 
+		String key = originalKey;
 		if ( cmdname == null || cmdname.trim().equals( "" ) || key == null ) {
 			log.error( "key is null or cmd is null/empty for set()" );
 			return false;
@@ -743,6 +764,7 @@ public class MemcachedClient {
 
 		// get SockIO obj
 		SockIOPool pool = currentPool.get();
+		int client_config_id = pool.getRejigConfig().getId();
 		SockIOPool.SockIO sock = pool.getSockAndFragmentId( key, hashCode ).sock();
 
 		if ( sock == null ) {
@@ -751,6 +773,7 @@ public class MemcachedClient {
 			return false;
 		}
 
+		Date expiry = originalExpiry;
 		if ( expiry == null )
 			expiry = new Date(0);
 
@@ -866,7 +889,7 @@ public class MemcachedClient {
 
 		// now write the data to the cache server
 		try {
-			String cmd = String.format( "%s %s %d %d %d\r\n", cmdname, key, flags, (expiry.getTime() / 1000), val.length );
+			String cmd = String.format( "rj %d %s %s %d %d %d\r\n", client_config_id, cmdname, key, flags, (expiry.getTime() / 1000), val.length );
 			sock.write( cmd.getBytes() );
 			sock.write( val );
 			sock.write( "\r\n".getBytes() );
@@ -877,7 +900,11 @@ public class MemcachedClient {
 			if ( log.isInfoEnabled() )
 				log.info( "++++ memcache cmd (result code): " + cmd + " (" + line + ")" );
 
-			if ( STORED.equals( line ) ) {
+			if ( REFRESH_AND_RETRY.equals( line ) ) {
+				handleRefreshAndRetry(pool, sock);
+				return set(cmdname, originalKey, value, originalExpiry, hashCode, asString);
+			}
+			else if ( STORED.equals( line ) ) {
 				if ( log.isInfoEnabled() )
 					log.info("++++ data successfully stored for key: " + key );
 				sock.close();
@@ -1158,8 +1185,13 @@ public class MemcachedClient {
 	 * @param hashCode if not null, then the int hashcode to use
 	 * @return new value or -1 if not exist
 	 */
-	private long incrdecr( String cmdname, String key, long inc, Integer hashCode ) {
+	private long incrdecr(
+			final String cmdname,
+			final String originalKey,
+			final long inc,
+			final Integer hashCode ) {
 
+		String key = originalKey;
 		if ( key == null ) {
 			log.error( "null key for incrdecr()" );
 			return -1;
@@ -1180,6 +1212,7 @@ public class MemcachedClient {
 
 		// get SockIO obj for given cache key
 		SockIOPool pool = currentPool.get();
+		int client_config_id = pool.getRejigConfig().getId();
 		SockIOPool.SockIO sock = pool.getSockAndFragmentId( key, hashCode ).sock();
 
 		if ( sock == null ) {
@@ -1189,7 +1222,7 @@ public class MemcachedClient {
 		}
 
 		try {
-			String cmd = String.format( "%s %s %d\r\n", cmdname, key, inc );
+			String cmd = String.format( "rj %d %s %s %d\r\n", client_config_id, cmdname, key, inc );
 			if ( log.isDebugEnabled() )
 				log.debug( "++++ memcache incr/decr command: " + cmd );
 
@@ -1199,7 +1232,11 @@ public class MemcachedClient {
 			// get result back
 			String line = sock.readLine();
 
-			if ( line.matches( "\\d+" ) ) {
+			if ( REFRESH_AND_RETRY.equals( line ) ) {
+				handleRefreshAndRetry(pool, sock);
+				return incrdecr(cmdname, originalKey, inc, hashCode);
+			}
+			else if ( line.matches( "\\d+" ) ) {
 
 				// return sock to pool and return result
 				sock.close();
@@ -1299,8 +1336,12 @@ public class MemcachedClient {
 	 * @param asString if true, then return string val
 	 * @return the object that was previously stored, or null if it was not previously stored
 	 */
-	public Object get( String key, Integer hashCode, boolean asString ) {
+	public Object get(
+		final String originalKey,
+		final Integer hashCode,
+		final boolean asString ) {
 
+		String key = originalKey;
 		if ( key == null ) {
 			log.error( "key is null for get()" );
 			return null;
@@ -1321,16 +1362,18 @@ public class MemcachedClient {
 
 		// get SockIO obj using cache key
 		SockIOPool pool = currentPool.get();
-		SockIOPool.SockIO sock = pool.getSockAndFragmentId( key, hashCode ).sock();
+		int client_config_id = pool.getRejigConfig().getId();
+		SockIOPool.SockAndFragmentId sockAndId = pool.getSockAndFragmentId( key, hashCode );
+		SockIOPool.SockIO sock = sockAndId.sock();
 
-	    if ( sock == null ) {
+		if ( sock == null ) {
 			if ( errorHandler != null )
 				errorHandler.handleErrorOnGet( this, new IOException( "no socket to server available" ), key );
 			return null;
 		}
 
 		try {
-			String cmd = "get " + key + "\r\n";
+			String cmd = "rj " + client_config_id +  " get " + key + "\r\n";
 
 			if ( log.isDebugEnabled() )
 				log.debug("++++ memcache get command: " + cmd);
@@ -1347,15 +1390,30 @@ public class MemcachedClient {
 				if ( log.isDebugEnabled() )
 					log.debug( "++++ line: " + line );
 
-				if ( line.startsWith( VALUE ) ) {
+				if ( REFRESH_AND_RETRY.equals(line) ) {
+					handleRefreshAndRetry(pool, sock);
+					return get(originalKey, hashCode, asString);
+				}
+				else if ( line.startsWith( VALUE ) ) {
 					String[] info = line.split(" ");
 					int flag      = Integer.parseInt( info[2] );
 					int length    = Integer.parseInt( info[3] );
+					int key_config_id = Integer.parseInt( info[4] );
 
 					if ( log.isDebugEnabled() ) {
 						log.debug( "++++ key: " + key );
 						log.debug( "++++ flags: " + flag );
 						log.debug( "++++ length: " + length );
+						log.debug( "++++ key config id: " + key_config_id );
+					}
+
+					// If fragment id is greater than the entry's config id
+					// it means that the entry is stale.
+					if ( sockAndId.fragmentId() > key_config_id ) {
+						sock.close();
+						sock = null;
+						delete( key );
+						return null;
 					}
 
 					// read obj into buffer
@@ -1444,7 +1502,7 @@ public class MemcachedClient {
 			sock.close();
 			sock = null;
 			return o;
-	    }
+		}
 		catch ( IOException e ) {
 
 			// if we have an errorHandler, use its hook
@@ -1835,6 +1893,7 @@ public class MemcachedClient {
 
 		// get all servers and iterate over them
 		SockIOPool pool = currentPool.get();
+		int client_config_id = pool.getRejigConfig().getId();
 		if (servers == null) {
 			RejigConfig config = pool.getRejigConfig();
 			servers = new String[config.getFragmentCount()];
@@ -1864,7 +1923,7 @@ public class MemcachedClient {
 			}
 
 			// build command
-			String command = "flush_all\r\n";
+			String command = "rj " + client_config_id + " flush_all\r\n";
 
 			try {
 				sock.write( command.getBytes() );
@@ -1872,6 +1931,10 @@ public class MemcachedClient {
 
 				// if we get appropriate response back, then we return true
 				String line = sock.readLine();
+				if ( REFRESH_AND_RETRY.equals( line) ) {
+					handleRefreshAndRetry(pool, sock);
+					return flushAll(servers);
+				}
 				success = ( OK.equals( line ) )
 					? success && true
 					: false;
@@ -2122,6 +2185,73 @@ public class MemcachedClient {
 		}
 
 		return statsMaps;
+	}
+
+	private void handleRefreshAndRetry(SockIOPool pool, SockIOPool.SockIO sock) throws IOException {
+		if ( log.isDebugEnabled() ) {
+			log.debug("++++ refresh and retry");
+		}
+
+		RejigConfig new_config = null;
+		String line = sock.readLine();
+		if ( END.equals(line) ) {
+			// Get new config from rejig coordinator.
+		}
+		else if ( line.startsWith( VALUE ) ) {
+			String[] info = line.split(" ");
+			String key = info[1];
+			int flag      = Integer.parseInt( info[2] );
+			int length    = Integer.parseInt( info[3] );
+
+			if ( !REJIG_CONFIG_STORAGE_KEY.equals( key )) {
+				log.error("++++ the key is not equal to the REJIG_CONFIG_STORAGE_KEY! This should never happen!.");
+				throw new IllegalStateException("Key in REFRESH_AND_RETRY error is wrong!");
+			}
+
+			if ( log.isDebugEnabled() ) {
+				log.debug( "++++ key: " + key );
+				log.debug( "++++ flags: " + flag );
+				log.debug( "++++ length: " + length );
+			}
+
+			// read the config bytes into buffer
+			byte[] buf = new byte[length];
+			sock.read( buf );
+			sock.clearEOL();
+
+			if ( (flag & F_COMPRESSED) == F_COMPRESSED ) {
+				try {
+					// read the input stream, and write to a byte array output stream since
+					// we have to read into a byte array, but we don't know how large it
+					// will need to be, and we don't want to resize it a bunch
+					GZIPInputStream gzi = new GZIPInputStream( new ByteArrayInputStream( buf ) );
+					ByteArrayOutputStream bos = new ByteArrayOutputStream( buf.length );
+
+					int count;
+					byte[] tmp = new byte[2048];
+					while ( (count = gzi.read(tmp)) != -1 ) {
+						bos.write( tmp, 0, count );
+					}
+
+					// store uncompressed back to buffer
+					buf = bos.toByteArray();
+					gzi.close();
+				}
+				catch ( IOException e ) {
+					// if we have an errorHandler, use its hook
+					if ( errorHandler != null )
+						errorHandler.handleErrorOnGet( this, e, key );
+
+					log.error( "++++ IOException thrown while trying to uncompress input stream for key: " + key + " -- " + e.getMessage() );
+					throw new NestedIOException( "++++ IOException thrown while trying to uncompress input stream for key: " + key, e );
+				}
+			}
+			new_config = RejigConfig.parseFrom(buf);
+		}
+
+		sock.close();
+		sock = null;
+		compareAndSetSockIOPool(pool, createSockIOPool(new_config));
 	}
 
 	protected final class NIOLoader {
