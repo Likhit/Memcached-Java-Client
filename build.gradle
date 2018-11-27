@@ -54,3 +54,8 @@ task testMemcached(type: JavaExec) {
     main = 'edu.usc.cs550.rejig.client.test.TestMemcached'
     classpath = sourceSets.test.runtimeClasspath
 }
+
+task unitTests(type: JavaExec) {
+    main = 'edu.usc.cs550.rejig.client.test.UnitTests'
+    classpath = sourceSets.test.runtimeClasspath
+}
