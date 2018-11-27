@@ -125,6 +125,7 @@ import org.apache.log4j.Logger;
  * </pre>
  *
  * @author greg whalin <greg@whalin.com>
+ * @author Likhit Dharmapuri <ldharmap@usc.edu>
  * @version 1.5
  */
 public class SockIOPool {
@@ -153,21 +154,61 @@ public class SockIOPool {
 	private boolean initialized        = false;
 	private int maxCreate              = 1;					// this will be initialized by pool when the pool is initialized
 
-	// initial, min and max pool sizes
-	private int poolMultiplier        = 3;
-	private int initConn              = 10;
-	private int minConn               = 5;
-	private int maxConn               = 100;
-	private long maxIdle              = 1000 * 60 * 5;		// max idle time for avail sockets
-	private long maxBusyTime          = 1000 * 30;			// max idle time for avail sockets
-	private long maintSleep           = 1000 * 30;			// maintenance thread sleep time
-	private int socketTO              = 1000 * 3;			// default timeout of socket reads
-	private int socketConnectTO       = 1000 * 3;	        // default timeout of socket connections
-	private boolean aliveCheck        = false;				// default to not check each connection for being alive
-	private boolean failover          = true;				// default to failover in event of cache server dead
-	private boolean failback          = true;				// only used if failover is also set ... controls putting a dead server back into rotation
-	private boolean nagle             = false;				// enable/disable Nagle's algorithm
-	private FragmentHashingAlgo hashingAlg = FragmentHashingAlgo.NATIVE_HASH;		// default to using the native hash as it is the fastest
+	/**
+	 * All the configurable parameters used by
+	 * the SockIOPool instance.
+	 */
+	public class SockIOPoolOptions {
+		/** The initial number of connections per server in the available pool. */
+		public int initConn = 10;
+		/** The min number of connections per server in the available pool. */
+		public int minConn = 5;
+		/** The max number of connections per server in the available pool. */
+		public int maxConn = 100;
+		/** The max idle time for avail sockets */
+		public long maxIdle = 1000 * 60 * 5;
+		/** The max idle time for avail sockets */
+		public long maxBusyTime = 1000 * 30;
+		/** Maintenance thread sleep time */
+		public long maintSleep = 1000 * 30;
+		/** Default timeout of socket reads */
+		public int socketTO = 1000 * 3;
+		/** Default timeout of socket connections */
+		public int socketConnectTO = 1000 * 3;
+		/** Default to not check each connection for being alive */
+		public boolean aliveCheck = false;
+		/** Default to failover in event of cache server dead */
+		public boolean failover = true;
+		/** Only used if failover is also set ... controls putting a dead server back into rotation */
+		public boolean failback = true;
+		/** Enable/disable Nagle's algorithm */
+		public boolean nagle = false;
+		/** Default to using the native hash as it is the fastest */
+		public FragmentHashingAlgo hashingAlg = FragmentHashingAlgo.NATIVE_HASH;
+
+		public SockIOPoolOptions copy() {
+			SockIOPoolOptions copy = new SockIOPoolOptions();
+			copy.initConn = initConn;
+			copy.minConn = minConn;
+			copy.maxConn = maxConn;
+			copy.maxIdle = maxIdle;
+			copy.maxBusyTime = maxBusyTime;
+			copy.maintSleep = maintSleep;
+			copy.socketTO = socketTO;
+			copy.socketConnectTO = socketConnectTO;
+			copy.aliveCheck = aliveCheck;
+			copy.failover = failover;
+			copy.failback = failback;
+			copy.nagle = nagle;
+			copy.hashingAlg = hashingAlg;
+			return copy;
+		}
+	}
+
+	private SockIOPoolOptions options;
+
+	private int poolMultiplier = 3;
+
 
 	// locks
 	private final ReentrantLock hostDeadLock = new ReentrantLock();
@@ -210,222 +251,30 @@ public class SockIOPool {
 	 *
 	 * @param config RejigConfig object
 	 */
-	public void setRejigConfig( RejigConfig config ) { this.config = config; }
+	public SockIOPool setRejigConfig( RejigConfig config ) {
+		this.config = config;
+		return this;
+	}
 
 	/**
 	 * Returns the current RejigConfig containing the list of all servers.
-	 *
-	 * @return RejigConfig object
 	 */
 	public RejigConfig getRejigConfig() { return this.config; }
 
 	/**
-	 * Sets the initial number of connections per server in the available pool.
-	 *
-	 * @param initConn int number of connections
+	 * Sets the SockIOPoolOptions that the object.
 	 */
-	public void setInitConn( int initConn ) { this.initConn = initConn; }
+	public SockIOPool setPoolOptions(SockIOPoolOptions options) {
+		this.options = options;
+		return this;
+	}
 
 	/**
-	 * Returns the current setting for the initial number of connections per server in
-	 * the available pool.
-	 *
-	 * @return number of connections
+	 * Returns a copy of the SockIOPoolOptions that the object.
 	 */
-	public int getInitConn() { return this.initConn; }
-
-	/**
-	 * Sets the minimum number of spare connections to maintain in our available pool.
-	 *
-	 * @param minConn number of connections
-	 */
-	public void setMinConn( int minConn ) { this.minConn = minConn; }
-
-	/**
-	 * Returns the minimum number of spare connections in available pool.
-	 *
-	 * @return number of connections
-	 */
-	public int getMinConn() { return this.minConn; }
-
-	/**
-	 * Sets the maximum number of spare connections allowed in our available pool.
-	 *
-	 * @param maxConn number of connections
-	 */
-	public void setMaxConn( int maxConn ) { this.maxConn = maxConn; }
-
-	/**
-	 * Returns the maximum number of spare connections allowed in available pool.
-	 *
-	 * @return number of connections
-	 */
-	public int getMaxConn() { return this.maxConn; }
-
-	/**
-	 * Sets the max idle time for threads in the available pool.
-	 *
-	 * @param maxIdle idle time in ms
-	 */
-	public void setMaxIdle( long maxIdle ) { this.maxIdle = maxIdle; }
-
-	/**
-	 * Returns the current max idle setting.
-	 *
-	 * @return max idle setting in ms
-	 */
-	public long getMaxIdle() { return this.maxIdle; }
-
-	/**
-	 * Sets the max busy time for threads in the busy pool.
-	 *
-	 * @param maxBusyTime idle time in ms
-	 */
-	public void setMaxBusyTime( long maxBusyTime ) { this.maxBusyTime = maxBusyTime; }
-
-	/**
-	 * Returns the current max busy setting.
-	 *
-	 * @return max busy setting in ms
-	 */
-	public long getMaxBusy() { return this.maxBusyTime; }
-
-	/**
-	 * Set the sleep time between runs of the pool maintenance thread.
-	 * If set to 0, then the maint thread will not be started.
-	 *
-	 * @param maintSleep sleep time in ms
-	 */
-	public void setMaintSleep( long maintSleep ) { this.maintSleep = maintSleep; }
-
-	/**
-	 * Returns the current maint thread sleep time.
-	 *
-	 * @return sleep time in ms
-	 */
-	public long getMaintSleep() { return this.maintSleep; }
-
-	/**
-	 * Sets the socket timeout for reads.
-	 *
-	 * @param socketTO timeout in ms
-	 */
-	public void setSocketTO( int socketTO ) { this.socketTO = socketTO; }
-
-	/**
-	 * Returns the socket timeout for reads.
-	 *
-	 * @return timeout in ms
-	 */
-	public int getSocketTO() { return this.socketTO; }
-
-	/**
-	 * Sets the socket timeout for connect.
-	 *
-	 * @param socketConnectTO timeout in ms
-	 */
-	public void setSocketConnectTO( int socketConnectTO ) { this.socketConnectTO = socketConnectTO; }
-
-	/**
-	 * Returns the socket timeout for connect.
-	 *
-	 * @return timeout in ms
-	 */
-	public int getSocketConnectTO() { return this.socketConnectTO; }
-
-	/**
-	 * Sets the failover flag for the pool.
-	 *
-	 * If this flag is set to true, and a socket fails to connect,<br/>
-	 * the pool will attempt to return a socket from another server<br/>
-	 * if one exists.  If set to false, then getting a socket<br/>
-	 * will return null if it fails to connect to the requested server.
-	 *
-	 * @param failover true/false
-	 */
-	public void setFailover( boolean failover ) { this.failover = failover; }
-
-	/**
-	 * Returns current state of failover flag.
-	 *
-	 * @return true/false
-	 */
-	public boolean getFailover() { return this.failover; }
-
-	/**
-	 * Sets the failback flag for the pool.
-	 *
-	 * If this is true and we have marked a host as dead,
-	 * will try to bring it back.  If it is false, we will never
-	 * try to resurrect a dead host.
-	 *
-	 * @param failback true/false
-	 */
-	public void setFailback( boolean failback ) { this.failback = failback; }
-
-	/**
-	 * Returns current state of failover flag.
-	 *
-	 * @return true/false
-	 */
-	public boolean getFailback() { return this.failback; }
-
-	/**
-	 * Sets the aliveCheck flag for the pool.
-	 *
-	 * When true, this will attempt to talk to the server on
-	 * every connection checkout to make sure the connection is
-	 * still valid.  This adds extra network chatter and thus is
-	 * defaulted off.  May be useful if you want to ensure you do
-	 * not have any problems talking to the server on a dead connection.
-	 *
-	 * @param aliveCheck true/false
-	 */
-	public void setAliveCheck( boolean aliveCheck ) { this.aliveCheck = aliveCheck; }
-
-
-	/**
-	 * Returns the current status of the aliveCheck flag.
-	 *
-	 * @return true / false
-	 */
-	public boolean getAliveCheck() { return this.aliveCheck; }
-
-	/**
-	 * Sets the Nagle alg flag for the pool.
-	 *
-	 * If false, will turn off Nagle's algorithm on all sockets created.
-	 *
-	 * @param nagle true/false
-	 */
-	public void setNagle( boolean nagle ) { this.nagle = nagle; }
-
-	/**
-	 * Returns current status of nagle flag
-	 *
-	 * @return true/false
-	 */
-	public boolean getNagle() { return this.nagle; }
-
-	/**
-	 * Sets the hashing algorithm we will use.
-	 *
-	 * The types are as follows.
-	 *
-	 * SockIOPool.FragmentHashingAlgo.NATIVE_HASH (0)     - native String.hashCode() - fast (cached) but not compatible with other clients
-	 * SockIOPool.FragmentHashingAlgo.OLD_COMPAT_HASH (1) - original compatibility hashing alg (works with other clients)
-	 * SockIOPool.FragmentHashingAlgo.NEW_COMPAT_HASH (2) - new CRC32 based compatibility hashing algorithm (fast and works with other clients)
-	 *
-	 * @param alg int value representing hashing algorithm
-	 */
-	public void setHashingAlg(FragmentHashingAlgo alg) { this.hashingAlg = alg; }
-
-	/**
-	 * Returns current status of customHash flag
-	 *
-	 * @return true/false
-	 */
-	public FragmentHashingAlgo getHashingAlg() { return this.hashingAlg; }
+	public SockIOPoolOptions getPoolOptions() {
+		return this.options.copy();
+	}
 
 	/**
 	 * Internal private hashing method.
@@ -477,7 +326,7 @@ public class SockIOPool {
 				return hashCode.longValue();
 		}
 		else {
-			switch ( hashingAlg ) {
+			switch ( options.hashingAlg ) {
 				case NATIVE_HASH:
 					return (long)key.hashCode();
 				case OLD_COMPAT_HASH:
@@ -486,7 +335,7 @@ public class SockIOPool {
 					return newCompatHashingAlg( key );
 				default:
 					// use the native hash as a default
-					hashingAlg = FragmentHashingAlgo.NATIVE_HASH;
+					options.hashingAlg = FragmentHashingAlgo.NATIVE_HASH;
 					return (long)key.hashCode();
 			}
 		}
@@ -503,7 +352,7 @@ public class SockIOPool {
 	/**
 	 * Initializes the pool.
 	 */
-	public void initialize() {
+	public SockIOPool initialize() {
 
 		synchronized( this ) {
 
@@ -512,23 +361,23 @@ public class SockIOPool {
 					&& ( availPool != null )
 					&& ( busyPool != null ) ) {
 				log.error( "++++ trying to initialize an already initialized pool" );
-				return;
+				return this;
 			}
 
 			// pools
-			availPool   = new HashMap<String,Map<SockIO,Long>>( config.getFragmentCount() * initConn );
-			busyPool    = new HashMap<String,Map<SockIO,Long>>( config.getFragmentCount() * initConn );
+			availPool   = new HashMap<String,Map<SockIO,Long>>( config.getFragmentCount() * options.initConn );
+			busyPool    = new HashMap<String,Map<SockIO,Long>>( config.getFragmentCount() * options.initConn );
 			deadPool    = new IdentityHashMap<SockIO,Integer>();
 
 			hostDeadDur = new HashMap<String,Long>();
 			hostDead    = new HashMap<String,Date>();
-			maxCreate   = (poolMultiplier > minConn) ? minConn : minConn / poolMultiplier;		// only create up to maxCreate connections at once
+			maxCreate   = (poolMultiplier > options.minConn) ? options.minConn : options.minConn / poolMultiplier;		// only create up to maxCreate connections at once
 
 			if ( log.isDebugEnabled() ) {
 				log.debug( "++++ initializing pool with following settings:" );
-				log.debug( "++++ initial size: " + initConn );
-				log.debug( "++++ min spare   : " + minConn );
-				log.debug( "++++ max spare   : " + maxConn );
+				log.debug( "++++ initial size: " + options.initConn );
+				log.debug( "++++ min spare   : " + options.minConn );
+				log.debug( "++++ max spare   : " + options.maxConn );
 			}
 
 			// if servers is not set, or it empty, then
@@ -545,9 +394,11 @@ public class SockIOPool {
 			this.initialized = true;
 
 			// start maint thread
-			if ( this.maintSleep > 0 )
+			if ( this.options.maintSleep > 0 )
 				this.startMaintThread();
 		}
+
+		return this;
 	}
 
 	private void populateBuckets() {
@@ -558,9 +409,9 @@ public class SockIOPool {
 			String server = config.getFragment(i).getAddress();
 			// create initial connections
 			if ( log.isDebugEnabled() )
-				log.debug( "+++ creating initial connections (" + initConn + ") for host: " + server);
+				log.debug( "+++ creating initial connections (" + options.initConn + ") for host: " + server);
 
-			for ( int j = 0; j < initConn; j++ ) {
+			for ( int j = 0; j < options.initConn; j++ ) {
 				SockIO socket = createSocket( server );
 				if ( socket == null ) {
 					log.error( "++++ failed to create connection to: " + server + " -- only " + j + " created." );
@@ -602,7 +453,7 @@ public class SockIOPool {
 		// we do not try to put back in if failback is off
 		hostDeadLock.lock();
 		try {
-			if ( failover && failback && hostDead.containsKey( host ) && hostDeadDur.containsKey( host ) ) {
+			if ( options.failover && options.failback && hostDead.containsKey( host ) && hostDeadDur.containsKey( host ) ) {
 
 				Date store  = hostDead.get( host );
 				long expire = hostDeadDur.get( host ).longValue();
@@ -616,7 +467,7 @@ public class SockIOPool {
 		}
 
 		try {
-			socket = new SockIO( this, host, this.socketTO, this.socketConnectTO, this.nagle );
+			socket = new SockIO( this, host, this.options.socketTO, this.options.socketConnectTO, this.options.nagle );
 
 			if ( !socket.isConnected() ) {
 				log.error( "++++ failed to get SockIO obj for: " + host + " -- new socket is not connected" );
@@ -732,7 +583,7 @@ public class SockIOPool {
 			SockIO sock = getConnection( config.getFragment( 0 ).getAddress() );
 
 			if ( sock != null && sock.isConnected() ) {
-				if ( aliveCheck ) {
+				if ( options.aliveCheck ) {
 					if ( !sock.isAlive() ) {
 						sock.close();
 						try { sock.trueClose(); } catch ( IOException ioe ) { log.error( "failed to close dead socket" ); }
@@ -770,7 +621,7 @@ public class SockIOPool {
 				log.debug( "cache choose " + server + " for " + key );
 
 			if ( sock != null && sock.isConnected() ) {
-				if ( aliveCheck ) {
+				if ( options.aliveCheck ) {
 					if ( sock.isAlive() ) {
 						return new SockAndFragmentId(sock, fragment.getId());
 					}
@@ -792,7 +643,7 @@ public class SockIOPool {
 			}
 
 			// if we do not want to failover, then bail here
-			if ( !failover )
+			if ( !options.failover )
 				return null;
 
 			// log that we tried
@@ -1102,7 +953,7 @@ public class SockIOPool {
 		}
 		else {
 			maintThread = new MaintThread( this );
-			maintThread.setInterval( this.maintSleep );
+			maintThread.setInterval( this.options.maintSleep );
 			maintThread.start();
 		}
 	}
@@ -1139,9 +990,9 @@ public class SockIOPool {
 					log.debug( "++++ Size of avail pool for host (" + host + ") = " + sockets.size() );
 
 				// if pool is too small (n < minSpare)
-				if ( sockets.size() < minConn ) {
+				if ( sockets.size() < options.minConn ) {
 					// need to create new sockets
-					int need = minConn - sockets.size();
+					int need = options.minConn - sockets.size();
 					needSockets.put( host, need );
 				}
 			}
@@ -1187,9 +1038,9 @@ public class SockIOPool {
 				if ( log.isDebugEnabled() )
 					log.debug( "++++ Size of avail pool for host (" + host + ") = " + sockets.size() );
 
-				if ( sockets.size() > maxConn ) {
+				if ( sockets.size() > options.maxConn ) {
 					// need to close down some sockets
-					int diff        = sockets.size() - maxConn;
+					int diff        = sockets.size() - options.maxConn;
 					int needToClose = (diff <= poolMultiplier)
 						? diff
 						: (diff) / poolMultiplier;
@@ -1208,7 +1059,7 @@ public class SockIOPool {
 						// if past idle time
 						// then close socket
 						// and remove from pool
-						if ( (expire + maxIdle) < System.currentTimeMillis() ) {
+						if ( (expire + options.maxIdle) < System.currentTimeMillis() ) {
 							if ( log.isDebugEnabled() )
 								log.debug( "+++ removing stale entry from pool as it is past its idle timeout and pool is over max spare" );
 
@@ -1240,7 +1091,7 @@ public class SockIOPool {
 					// if past max busy time
 					// then close socket
 					// and remove from pool
-					if ( (hungTime + maxBusyTime) < System.currentTimeMillis() ) {
+					if ( (hungTime + options.maxBusyTime) < System.currentTimeMillis() ) {
 						log.error( "+++ removing potentially hung connection from busy pool ... socket in pool for " + (System.currentTimeMillis() - hungTime) + "ms" );
 
 						// remove from the busy pool

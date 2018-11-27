@@ -17,6 +17,7 @@
  */
 package edu.usc.cs550.rejig.client;
 
+import edu.usc.cs550.rejig.client.configreader.RejigConfigReader;
 import edu.usc.cs550.rejig.interfaces.Fragment;
 import edu.usc.cs550.rejig.interfaces.RejigConfig;
 
@@ -156,6 +157,7 @@ import org.apache.log4j.Logger;
  * @author Kevin Burton <burton@peerfear.org>
  * @author Robert Watts <robert@wattsit.co.uk>
  * @author Vin Chawla <vin@tivo.com>
+ * @author Likhit Dharmapuri <ldharmap@usc.edu>
  * @version 1.5
  */
 public class MemcachedClient {
@@ -216,6 +218,9 @@ public class MemcachedClient {
 	// pool instance
 	private AtomicReference<SockIOPool> currentPool;
 
+	// sockiopool initialization options.
+	SockIOPool.SockIOPoolOptions poolOptions;
+
 	// which pool to use
 	private String poolNamePrefix;
 
@@ -225,11 +230,18 @@ public class MemcachedClient {
 	// optional error handler
 	private ErrorHandler errorHandler;
 
+	// config reader
+	RejigConfigReader configReader;
+
 	/**
 	 * Creates a new instance of MemCachedClient.
+	 * @param reader The reader to use to accquire and update the RejigConfig object used to create the SockIOPool.
+	 * @param options The options on the SockIOPool maintained by this client.
 	 */
-	public MemcachedClient() {
+	public MemcachedClient( RejigConfigReader reader, SockIOPool.SockIOPoolOptions options ) {
 		this.poolNamePrefix = "default";
+		this.configReader = reader;
+		this.poolOptions = options;
 		init();
 	}
 
@@ -239,9 +251,13 @@ public class MemcachedClient {
 	 * to the name of the SockIOPool created.
 	 *
 	 * @param poolNamePrefix prefix to name of SockIOPool
+	 * @param reader The reader to use to accquire and update the RejigConfig object used to create the SockIOPool.
+	 * @param options The options on the SockIOPool maintained by this client.
 	 */
-	public MemcachedClient( String poolNamePrefix ) {
+	public MemcachedClient( String poolNamePrefix, RejigConfigReader reader, SockIOPool.SockIOPoolOptions options ) {
 		this.poolNamePrefix = poolNamePrefix;
+		this.configReader = reader;
+		this.poolOptions = options;
 		init();
 	}
 
@@ -278,11 +294,15 @@ public class MemcachedClient {
 	 * @param classLoader ClassLoader object.
 	 * @param errorHandler ErrorHandler object.
 	 * @param poolNamePrefix SockIOPool name's prefix.
+	 * @param reader The reader to use to accquire and update the RejigConfig object used to create the SockIOPool.
+	 * @param options The options on the SockIOPool maintained by this client.
 	 */
-	public MemcachedClient( ClassLoader classLoader, ErrorHandler errorHandler, String poolNamePrefix ) {
+	public MemcachedClient( ClassLoader classLoader, ErrorHandler errorHandler, String poolNamePrefix, RejigConfigReader reader, SockIOPool.SockIOPoolOptions options ) {
 		this.classLoader  = classLoader;
 		this.errorHandler = errorHandler;
 		this.poolNamePrefix = poolNamePrefix;
+		this.configReader = reader;
+		this.poolOptions = options;
 		init();
 	}
 
@@ -297,6 +317,8 @@ public class MemcachedClient {
 		this.compressEnable     = true;
 		this.compressThreshold  = COMPRESS_THRESH;
 		this.defaultEncoding    = "UTF-8";
+		RejigConfig config = this.configReader.getConfig();
+		currentPool.set(createSockIOPool(config));
 	}
 
 	/**
@@ -305,9 +327,10 @@ public class MemcachedClient {
 	 */
 	private SockIOPool createSockIOPool(RejigConfig config) {
 		String poolName = String.format("%s-%d", this.poolNamePrefix, config.getId());
-		SockIOPool pool = SockIOPool.getInstance(poolName);
-		pool.setRejigConfig(config);
-		pool.initialize();
+		SockIOPool pool = SockIOPool.getInstance(poolName)
+			.setRejigConfig(config)
+			.setPoolOptions(poolOptions)
+			.initialize();
 		return pool;
 	}
 
@@ -2195,7 +2218,7 @@ public class MemcachedClient {
 		RejigConfig new_config = null;
 		String line = sock.readLine();
 		if ( END.equals(line) ) {
-			// Get new config from rejig coordinator.
+			new_config = configReader.getConfig();
 		}
 		else if ( line.startsWith( VALUE ) ) {
 			String[] info = line.split(" ");
@@ -2385,7 +2408,7 @@ public class MemcachedClient {
 				// 2) we time out
 				long startTime = System.currentTimeMillis();
 
-				long timeout = pool.getMaxBusy();
+				long timeout = pool.getPoolOptions().maxBusyTime;
 				timeRemaining = timeout;
 
 				while ( numConns > 0 && timeRemaining > 0 ) {
