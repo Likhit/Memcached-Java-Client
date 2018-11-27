@@ -31,7 +31,7 @@ repositories {
 task memcachedBench(type: JavaExec) {
     main = 'edu.usc.cs550.rejig.client.test.MemcachedBench'
     classpath = sourceSets.test.runtimeClasspath
-    // Pass arguments using -PrunsAndStart=x
+    // Pass arguments using -PcmdArgs=x
     if (project.hasProperty('cmdArgs')) {
         args(cmdArgs.split(','))
     } else {
@@ -42,10 +42,15 @@ task memcachedBench(type: JavaExec) {
 task memcachedTest(type: JavaExec) {
     main = 'edu.usc.cs550.rejig.client.test.MemcachedTest'
     classpath = sourceSets.test.runtimeClasspath
-    // Pass arguments using -PrunsAndStart=x
+    // Pass arguments using -PcmdArgs=x
     if (project.hasProperty('cmdArgs')) {
         args(cmdArgs.split(','))
     } else {
         args(['10', '100000', '10'])
     }
+}
+
+task testMemcached(type: JavaExec) {
+    main = 'edu.usc.cs550.rejig.client.test.TestMemcached'
+    classpath = sourceSets.test.runtimeClasspath
 }
