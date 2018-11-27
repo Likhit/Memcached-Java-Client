@@ -38,3 +38,14 @@ task memcachedBench(type: JavaExec) {
         args(['100000', '0'])
     }
 }
+
+task memcachedTest(type: JavaExec) {
+    main = 'edu.usc.cs550.rejig.client.test.MemcachedTest'
+    classpath = sourceSets.test.runtimeClasspath
+    // Pass arguments using -PrunsAndStart=x
+    if (project.hasProperty('cmdArgs')) {
+        args(cmdArgs.split(','))
+    } else {
+        args(['10', '100000', '10'])
+    }
+}
