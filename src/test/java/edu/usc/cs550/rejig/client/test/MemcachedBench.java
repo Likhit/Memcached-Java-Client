@@ -15,85 +15,94 @@
 //  *
 //  * @author Greg Whalin <greg@meetup.com>
 //  */
-// package edu.usc.cs550.rejig.client.test;
+package edu.usc.cs550.rejig.client.test;
 
-// import edu.usc.cs550.rejig.client.*;
-// import java.util.*;
-// import org.apache.log4j.Level;
-// import org.apache.log4j.Logger;
-// import org.apache.log4j.BasicConfigurator;
+import edu.usc.cs550.rejig.client.*;
+import edu.usc.cs550.rejig.interfaces.Fragment;
+import edu.usc.cs550.rejig.interfaces.RejigConfig;
 
-// public class MemcachedBench {
+import java.util.*;
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
+import org.apache.log4j.BasicConfigurator;
 
-// 	// logger
-// 	private static Logger log =
-// 		Logger.getLogger( MemcachedBench.class.getName() );
+public class MemcachedBench {
 
-// 	public static void main(String[] args) {
+	// logger
+	private static Logger log =
+		Logger.getLogger( MemcachedBench.class.getName() );
 
-// 		BasicConfigurator.configure();
-// 		org.apache.log4j.Logger.getRootLogger().setLevel( Level.OFF );
+	public static void main(String[] args) {
 
-// 		int runs = Integer.parseInt(args[0]);
-// 		int start = Integer.parseInt(args[1]);
+		BasicConfigurator.configure();
+		org.apache.log4j.Logger.getRootLogger().setLevel( Level.OFF );
 
-// 		String[] serverlist = { "192.168.1.50:1624" };
+		int runs = Integer.parseInt(args[0]);
+		int start = Integer.parseInt(args[1]);
 
-// 		// initialize the pool for memcache servers
-// 		SockIOPool pool = SockIOPool.getInstance( "test" );
-// 		pool.setServers(serverlist);
+		String[] servers = { "localhost:11211" };
 
-// 		pool.setInitConn( 100 );
-// 		pool.setMinConn( 100 );
-// 		pool.setMaxConn( 500 );
-// 		pool.setMaintSleep( 20 );
+		// initialize the pool options.
+		SockIOPool.SockIOPoolOptions options = new SockIOPool.SockIOPoolOptions();
+		options.initConn = 100;
+		options.minConn = 100;
+		options.maxConn = 500;
+		options.maintSleep = 20 ;
+		options.nagle = false;
 
-// 		pool.setNagle( false );
-// 		pool.initialize();
+		// get client instance
+		MockRejigConfigReader configReader = new MockRejigConfigReader();
+		configReader.setConfig(RejigConfig.newBuilder()
+			.setId(1)
+			.addFragment(Fragment.newBuilder()
+				.setId(1)
+				.setAddress(servers[0])
+				.build()
+			).build());
+		MemcachedClient mc = new MemcachedClient(
+			null, new MockErrorHandler(),
+			"test", configReader, options);
+		mc.setCompressEnable( false );
 
-// 		// get client instance
-// 		MemcachedClient mc = new MemcachedClient( "test" );
-// 		mc.setCompressEnable( false );
+		String keyBase = "testKey";
+		String object = "This is a test of an object blah blah es, serialization does not seem to slow things down so much.  The gzip compression is horrible horrible performance, so we only use it for very large objects.  I have not done any heavy benchmarking recently";
 
-// 		String keyBase = "testKey";
-// 		String object = "This is a test of an object blah blah es, serialization does not seem to slow things down so much.  The gzip compression is horrible horrible performance, so we only use it for very large objects.  I have not done any heavy benchmarking recently";
+		long begin = System.currentTimeMillis();
+		for (int i = start; i < start+runs; i++) {
+			mc.set(keyBase + i, object);
+		}
+		long end = System.currentTimeMillis();
+		long time = end - begin;
+		System.out.println(runs + " sets: " + time + "ms");
 
-// 		long begin = System.currentTimeMillis();
-// 		for (int i = start; i < start+runs; i++) {
-// 			mc.set(keyBase + i, object);
-// 		}
-// 		long end = System.currentTimeMillis();
-// 		long time = end - begin;
-// 		System.out.println(runs + " sets: " + time + "ms");
+		begin = System.currentTimeMillis();
+		for (int i = start; i < start+runs; i++) {
+			String str = (String) mc.get(keyBase + i);
+		}
+		end = System.currentTimeMillis();
+		time = end - begin;
+		System.out.println(runs + " gets: " + time + "ms");
 
-// 		begin = System.currentTimeMillis();
-// 		for (int i = start; i < start+runs; i++) {
-// 			String str = (String) mc.get(keyBase + i);
-// 		}
-// 		end = System.currentTimeMillis();
-// 		time = end - begin;
-// 		System.out.println(runs + " gets: " + time + "ms");
+		String[] keys = new String[ runs ];
+		int j = 0;
+		for (int i = start; i < start+runs; i++) {
+			keys[ j ] = keyBase + i;
+			j++;
+		}
+		begin = System.currentTimeMillis();
+		Map vals = mc.getMulti( keys );
+		end = System.currentTimeMillis();
+		time = end - begin;
+		System.out.println(runs + " getMulti: " + time + "ms");
 
-// 		String[] keys = new String[ runs ];
-// 		int j = 0;
-// 		for (int i = start; i < start+runs; i++) {
-// 			keys[ j ] = keyBase + i;
-// 			j++;
-// 		}
-// 		begin = System.currentTimeMillis();
-// 		Map vals = mc.getMulti( keys );
-// 		end = System.currentTimeMillis();
-// 		time = end - begin;
-// 		System.out.println(runs + " getMulti: " + time + "ms");
+		begin = System.currentTimeMillis();
+		for (int i = start; i < start+runs; i++) {
+			mc.delete( keyBase + i );
+		}
+		end = System.currentTimeMillis();
+		time = end - begin;
+		System.out.println(runs + " deletes: " + time + "ms");
 
-// 		begin = System.currentTimeMillis();
-// 		for (int i = start; i < start+runs; i++) {
-// 			mc.delete( keyBase + i );
-// 		}
-// 		end = System.currentTimeMillis();
-// 		time = end - begin;
-// 		System.out.println(runs + " deletes: " + time + "ms");
-
-// 		SockIOPool.getInstance( "test" ).shutDown();
-// 	}
-// }
+		mc.shutDown();
+	}
+}

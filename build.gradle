@@ -26,3 +26,15 @@ repositories {
     // You can declare any Maven/Ivy/file repository here.
     jcenter()
 }
+
+// Run tests as tasks
+task memcachedBench(type: JavaExec) {
+    main = 'edu.usc.cs550.rejig.client.test.MemcachedBench'
+    classpath = sourceSets.test.runtimeClasspath
+    // Pass arguments using -PrunsAndStart=x
+    if (project.hasProperty('cmdArgs')) {
+        args(cmdArgs.split(','))
+    } else {
+        args(['100000', '0'])
+    }
+}

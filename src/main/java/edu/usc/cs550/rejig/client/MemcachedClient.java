@@ -318,7 +318,7 @@ public class MemcachedClient {
 		this.compressThreshold  = COMPRESS_THRESH;
 		this.defaultEncoding    = "UTF-8";
 		RejigConfig config = this.configReader.getConfig();
-		currentPool.set(createSockIOPool(config));
+		currentPool = new AtomicReference<SockIOPool>(createSockIOPool(config));
 	}
 
 	/**
@@ -526,7 +526,7 @@ public class MemcachedClient {
 		// build command
 		StringBuilder command = new StringBuilder( "rj " )
 			.append( client_config_id )
-			.append( " delete" )
+			.append( " delete " )
 			.append( key );
 		if ( expiry != null )
 			command.append( " " + expiry.getTime() / 1000 );
@@ -1396,8 +1396,7 @@ public class MemcachedClient {
 		}
 
 		try {
-			String cmd = "rj " + client_config_id +  " get " + key + "\r\n";
-
+			String cmd = "rj " + client_config_id + " get " + key + "\r\n";
 			if ( log.isDebugEnabled() )
 				log.debug("++++ memcache get command: " + cmd);
 
@@ -2208,6 +2207,18 @@ public class MemcachedClient {
 		}
 
 		return statsMaps;
+	}
+
+	/** Shuts down the SockIOPool. */
+	public void shutDown() {
+		currentPool.get().shutDown();
+		currentPool.set(null);
+		currentPool = null;
+		poolOptions = null;
+		poolNamePrefix = null;
+		classLoader = null;
+		errorHandler = null;
+		configReader = null;
 	}
 
 	private void handleRefreshAndRetry(SockIOPool pool, SockIOPool.SockIO sock) throws IOException {

@@ -158,7 +158,7 @@ public class SockIOPool {
 	 * All the configurable parameters used by
 	 * the SockIOPool instance.
 	 */
-	public class SockIOPoolOptions {
+	public static class SockIOPoolOptions {
 		/** The initial number of connections per server in the available pool. */
 		public int initConn = 10;
 		/** The min number of connections per server in the available pool. */
