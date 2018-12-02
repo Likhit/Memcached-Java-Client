@@ -177,6 +177,8 @@ public class MemcachedClient {
 	private static final String OK           = "OK";			// success
 	private static final String END          = "END";			// end of data from server
 	private static final String REFRESH_AND_RETRY = "REFRESH_AND_RETRY";	// client's config stale.
+	private static final String GRANTED = "GRANTED";	// lease granted
+	private static final String REVOKED = "REVOKED";	// lease revoked
 	private static final String REJIG_CONFIG_STORAGE_KEY = "REJIG_CONFIG_STORAGE_KEY";	// The identifier returned in the value line when REFRESH_AND_RETRY error occurs.
 
 	private static final String ERROR        = "ERROR";			// invalid command name from client
@@ -2325,6 +2327,9 @@ public class MemcachedClient {
 				if (errorHandler != null) {
 					errorHandler.handleErrorOnConf( this, new IllegalArgumentException("The config id is lower than the current config id."));
 				}
+				sock.close();
+				sock = null;
+				return false;
 			}
 			else if ( STORED.equals( line ) ) {
 				if ( log.isInfoEnabled() )
@@ -2347,6 +2352,169 @@ public class MemcachedClient {
 			// if we have an errorHandler, use its hook
 			if ( errorHandler != null )
 				errorHandler.handleErrorOnConf( this, e );
+
+			// exception thrown
+			log.error( "++++ exception thrown while writing bytes to server on set" );
+			log.error( e.getMessage(), e );
+
+			try {
+				sock.trueClose();
+			}
+			catch ( IOException ioe ) {
+				log.error( "++++ failed to close socket : " + sock.toString() );
+			}
+
+			sock = null;
+		}
+
+		if ( sock != null ) {
+			sock.close();
+			sock = null;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Grans a lease on the fragment to the specified host.
+	 *
+	 * @param fragmentNum the fragment to grant the lease to
+	 * @param expiry when to expire the record
+	 * @param server ip:port of the server to push the config to
+	 * @return true, if the data was successfully stored
+	 */
+	public boolean grantLease( int fragmentNum, Date expiry, String server ) {
+		// get SockIO obj
+		SockIOPool pool = currentPool.get();
+		int client_config_id = pool.getRejigConfig().getId();
+		SockIOPool.SockAndFragmentId sockAndId = pool.getHostSockAndFragmentId( server );
+
+		if ( sockAndId == null || sockAndId.sock() == null ) {
+			if ( errorHandler != null )
+				errorHandler.handleErrorOnGrantLease( this, new IOException( "no socket to server available" ) );
+			return false;
+		}
+		SockIOPool.SockIO sock = sockAndId.sock();
+
+		if ( expiry == null ) {
+			expiry = new Date(0);
+		}
+
+		// now write the data to the cache server
+		try {
+			String cmd = String.format( "rj %d %d grant %d\r\n", client_config_id, fragmentNum, (expiry.getTime() / 1000) );
+			sock.write( cmd.getBytes() );
+			sock.flush();
+
+			// get result code
+			String line = sock.readLine();
+			if ( log.isInfoEnabled() )
+				log.info( "++++ memcache grant (result code): " + line );
+
+			if ( REFRESH_AND_RETRY.equals(line) ) {
+				if (errorHandler != null) {
+					errorHandler.handleErrorOnGrantLease( this, new IllegalArgumentException("The config id is lower than the current config id."));
+				}
+				sock.close();
+				sock = null;
+				return false;
+			}
+			else if ( GRANTED.equals( line ) ) {
+				if ( log.isInfoEnabled() )
+					log.info("++++ lease successfully granted. Fragment num: " + fragmentNum );
+				sock.close();
+				sock = null;
+				return true;
+			}
+			else {
+				log.error( "++++ error granting lease. Fragment num: " + fragmentNum );
+				log.error( "++++ server response: " + line );
+			}
+		}
+		catch ( IOException e ) {
+
+			// if we have an errorHandler, use its hook
+			if ( errorHandler != null )
+				errorHandler.handleErrorOnGrantLease( this, e );
+
+			// exception thrown
+			log.error( "++++ exception thrown while writing bytes to server on set" );
+			log.error( e.getMessage(), e );
+
+			try {
+				sock.trueClose();
+			}
+			catch ( IOException ioe ) {
+				log.error( "++++ failed to close socket : " + sock.toString() );
+			}
+
+			sock = null;
+		}
+
+		if ( sock != null ) {
+			sock.close();
+			sock = null;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Revokes the lease on the fragment to the specified host.
+	 *
+	 * @param fragmentNum the fragment to grant the lease to
+	 * @param server ip:port of the server to push the config to
+	 * @return true, if the data was successfully stored
+	 */
+	public boolean revokeLease( int fragmentNum, String server ) {
+		// get SockIO obj
+		SockIOPool pool = currentPool.get();
+		int client_config_id = pool.getRejigConfig().getId();
+		SockIOPool.SockAndFragmentId sockAndId = pool.getHostSockAndFragmentId( server );
+
+		if ( sockAndId == null || sockAndId.sock() == null ) {
+			if ( errorHandler != null )
+				errorHandler.handleErrorOnRevokeLease( this, new IOException( "no socket to server available" ) );
+			return false;
+		}
+		SockIOPool.SockIO sock = sockAndId.sock();
+
+		// now write the data to the cache server
+		try {
+			String cmd = String.format( "rj %d %d revoke\r\n", client_config_id, fragmentNum );
+			sock.write( cmd.getBytes() );
+			sock.flush();
+
+			// get result code
+			String line = sock.readLine();
+			if ( log.isInfoEnabled() )
+				log.info( "++++ memcache revoke (result code): " + line );
+
+			if ( REFRESH_AND_RETRY.equals(line) ) {
+				if (errorHandler != null) {
+					errorHandler.handleErrorOnRevokeLease( this, new IllegalArgumentException("The config id is lower than the current config id."));
+				}
+				sock.close();
+				sock = null;
+				return false;
+			}
+			else if ( REVOKED.equals( line ) ) {
+				if ( log.isInfoEnabled() )
+					log.info("++++ lease successfully revoked. Fragment num: " + fragmentNum );
+				sock.close();
+				sock = null;
+				return true;
+			}
+			else {
+				log.error( "++++ error revoking lease. Fragment num: " + fragmentNum );
+				log.error( "++++ server response: " + line );
+			}
+		}
+		catch ( IOException e ) {
+
+			// if we have an errorHandler, use its hook
+			if ( errorHandler != null )
+				errorHandler.handleErrorOnRevokeLease( this, e );
 
 			// exception thrown
 			log.error( "++++ exception thrown while writing bytes to server on set" );

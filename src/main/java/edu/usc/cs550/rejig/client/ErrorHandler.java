@@ -75,4 +75,16 @@ public interface ErrorHandler {
     public void handleErrorOnConf( final MemcachedClient client ,
                                     final Throwable error);
 
+    /**
+     * Called for errors thrown during {@link MemcachedClient#grantLease()} and related methods.
+     */
+    public void handleErrorOnGrantLease( final MemcachedClient client ,
+                                    final Throwable error);
+
+    /**
+     * Called for errors thrown during {@link MemcachedClient#revokeLease()} and related methods.
+     */
+    public void handleErrorOnRevokeLease( final MemcachedClient client ,
+                                    final Throwable error);
+
 } // interface

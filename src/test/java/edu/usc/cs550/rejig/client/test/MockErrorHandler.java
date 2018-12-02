@@ -48,4 +48,14 @@ class MockErrorHandler implements ErrorHandler {
 		final MemcachedClient client, final Throwable error) {
 			throw new RuntimeException(error);
 	}
+
+	public void handleErrorOnGrantLease(
+		final MemcachedClient client, final Throwable error) {
+			throw new RuntimeException(error);
+	}
+
+	public void handleErrorOnRevokeLease(
+		final MemcachedClient client, final Throwable error) {
+			throw new RuntimeException(error);
+	}
 }
