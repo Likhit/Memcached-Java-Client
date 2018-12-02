@@ -515,14 +515,14 @@ public class MemcachedClient {
 		SockIOPool pool = currentPool.get();
 		int client_config_id = pool.getRejigConfig().getId();
 		SockIOPool.SockAndFragmentId sockAndId = pool.getSockAndFragmentId( key, hashCode );
-		SockIOPool.SockIO sock = sockAndId.sock();
 
 		// return false if unable to get SockIO obj
-		if ( sock == null ) {
+		if ( sockAndId == null || sockAndId.sock() == null ) {
 			if ( errorHandler != null )
 				errorHandler.handleErrorOnDelete( this, new IOException( "no socket to server available" ), key );
 			return false;
 		}
+		SockIOPool.SockIO sock = sockAndId.sock();
 
 		// build command
 		StringBuilder command = new StringBuilder( "rj " )
@@ -792,13 +792,13 @@ public class MemcachedClient {
 		SockIOPool pool = currentPool.get();
 		int client_config_id = pool.getRejigConfig().getId();
 		SockIOPool.SockAndFragmentId sockAndId = pool.getSockAndFragmentId( key, hashCode );
-		SockIOPool.SockIO sock = sockAndId.sock();
 
-		if ( sock == null ) {
+		if ( sockAndId == null || sockAndId.sock() == null ) {
 			if ( errorHandler != null )
 				errorHandler.handleErrorOnSet( this, new IOException( "no socket to server available" ), key );
 			return false;
 		}
+		SockIOPool.SockIO sock = sockAndId.sock();
 
 		Date expiry = originalExpiry;
 		if ( expiry == null )
@@ -1241,13 +1241,13 @@ public class MemcachedClient {
 		SockIOPool pool = currentPool.get();
 		int client_config_id = pool.getRejigConfig().getId();
 		SockIOPool.SockAndFragmentId sockAndId = pool.getSockAndFragmentId( key, hashCode );
-		SockIOPool.SockIO sock = sockAndId.sock();
 
-		if ( sock == null ) {
+		if ( sockAndId == null || sockAndId.sock() == null ) {
 			if ( errorHandler != null )
 				errorHandler.handleErrorOnSet( this, new IOException( "no socket to server available" ), key );
 			return -1;
 		}
+		SockIOPool.SockIO sock = sockAndId.sock();
 
 		try {
 			String cmd = String.format( "rj %d %d %s %s %d\r\n", client_config_id, sockAndId.fragmentNum(), cmdname, key, inc );
@@ -1392,13 +1392,13 @@ public class MemcachedClient {
 		SockIOPool pool = currentPool.get();
 		int client_config_id = pool.getRejigConfig().getId();
 		SockIOPool.SockAndFragmentId sockAndId = pool.getSockAndFragmentId( key, hashCode );
-		SockIOPool.SockIO sock = sockAndId.sock();
 
-		if ( sock == null ) {
+		if ( sockAndId == null || sockAndId.sock() == null ) {
 			if ( errorHandler != null )
 				errorHandler.handleErrorOnGet( this, new IOException( "no socket to server available" ), key );
 			return null;
 		}
+		SockIOPool.SockIO sock = sockAndId.sock();
 
 		try {
 			String cmd = String.format("rj %d %d get %s\r\n", client_config_id, sockAndId.fragmentNum(), key);
@@ -1939,18 +1939,18 @@ public class MemcachedClient {
 		boolean success = true;
 
 		for ( int i = 0; i < servers.length; i++ ) {
-
-			SockIOPool.SockIO sock = pool.getConnection( servers[i] );
-			if ( sock == null ) {
+			SockIOPool.SockAndFragmentId sockAndFragmentId = pool.getHostSockAndFragmentId( servers[i] );
+			if ( sockAndFragmentId == null || sockAndFragmentId.sock() == null ) {
 				log.error( "++++ unable to get connection to : " + servers[i] );
 				success = false;
 				if ( errorHandler != null )
 					errorHandler.handleErrorOnFlush( this, new IOException( "no socket to server available" ) );
 				continue;
 			}
+			SockIOPool.SockIO sock = sockAndFragmentId.sock();
 
 			// build command
-			String command = String.format("rj %d %d flush_all\r\n", client_config_id, i + 1);
+			String command = String.format("rj %d %d flush_all\r\n", client_config_id, sockAndFragmentId.fragmentNum());
 
 			try {
 				sock.write( command.getBytes() );
@@ -2224,6 +2224,150 @@ public class MemcachedClient {
 		classLoader = null;
 		errorHandler = null;
 		configReader = null;
+	}
+
+	/**
+	 * Updates the rejig config on the server to the specified version.
+	 *
+	 * @param value value to store
+	 * @param numberOfFragments the number of fragments to use (for leasing)
+	 * @param expiry when to expire the record
+	 * @param server ip:port of the server to push the config to
+	 * @return true, if the data was successfully stored
+	 */
+	public boolean setConfig( RejigConfig config, int numberOfFragments, Date expiry, String server ) {
+		// get SockIO obj
+		SockIOPool pool = currentPool.get();
+		SockIOPool.SockAndFragmentId sockAndId = pool.getHostSockAndFragmentId( server );
+
+		if ( sockAndId == null || sockAndId.sock() == null ) {
+			if ( errorHandler != null )
+				errorHandler.handleErrorOnConf( this, new IOException( "no socket to server available" ) );
+			return false;
+		}
+		SockIOPool.SockIO sock = sockAndId.sock();
+
+		if ( expiry == null )
+			expiry = new Date(0);
+
+		// store flags
+		int flags = 0;
+
+		byte[] value = config.toByteArray();
+		// byte array to hold data
+		byte[] val;
+
+		try {
+			if ( log.isInfoEnabled() ) {
+				log.info( "Storing with native handler..." );
+			}
+			flags |= NativeHandler.getMarkerFlag( value );
+			val = NativeHandler.encode( value );
+		}
+		catch ( Exception e ) {
+
+			// if we have an errorHandler, use its hook
+			if ( errorHandler != null )
+				errorHandler.handleErrorOnConf( this, e );
+
+			log.error( "Failed to native handle obj", e );
+
+			sock.close();
+			sock = null;
+			return false;
+		}
+
+		// now try to compress if we want to
+		// and if the length is over the threshold
+		if ( compressEnable && val.length > compressThreshold ) {
+			try {
+				if ( log.isInfoEnabled() ) {
+					log.info( "++++ trying to compress data" );
+					log.info( "++++ size prior to compression: " + val.length );
+				}
+				ByteArrayOutputStream bos = new ByteArrayOutputStream( val.length );
+				GZIPOutputStream gos = new GZIPOutputStream( bos );
+				gos.write( val, 0, val.length );
+				gos.finish();
+				gos.close();
+
+				// store it and set compression flag
+				val = bos.toByteArray();
+				flags |= F_COMPRESSED;
+
+				if ( log.isInfoEnabled() )
+					log.info( "++++ compression succeeded, size after: " + val.length );
+			}
+			catch ( IOException e ) {
+				// if we have an errorHandler, use its hook
+				if ( errorHandler != null )
+					errorHandler.handleErrorOnConf( this, e );
+
+				log.error( "IOException while compressing stream: " + e.getMessage() );
+				log.error( "storing data uncompressed" );
+			}
+		}
+
+		// now write the data to the cache server
+		try {
+			String cmd = String.format( "rj %d %d conf %d %d %d\r\n", config.getId(), sockAndId.fragmentNum(), flags, (expiry.getTime() / 1000), val.length );
+			sock.write( cmd.getBytes() );
+			sock.write( val );
+			sock.write( "\r\n".getBytes() );
+			sock.flush();
+
+			// get result code
+			String line = sock.readLine();
+			if ( log.isInfoEnabled() )
+				log.info( "++++ memcache conf (result code): " + line );
+
+			if ( REFRESH_AND_RETRY.equals(line) ) {
+				if (errorHandler != null) {
+					errorHandler.handleErrorOnConf( this, new IllegalArgumentException("The config id is lower than the current config id."));
+				}
+			}
+			else if ( STORED.equals( line ) ) {
+				if ( log.isInfoEnabled() )
+					log.info("++++ config successfully stored. Config id: " + config.getId() );
+				sock.close();
+				sock = null;
+				return true;
+			}
+			else if ( NOTSTORED.equals( line ) ) {
+				if ( log.isInfoEnabled() )
+					log.info( "++++ config not stored. Config id: " + config.getId() );
+			}
+			else {
+				log.error( "++++ error storing config. Config id: " + config.getId() + " -- length: " + val.length );
+				log.error( "++++ server response: " + line );
+			}
+		}
+		catch ( IOException e ) {
+
+			// if we have an errorHandler, use its hook
+			if ( errorHandler != null )
+				errorHandler.handleErrorOnConf( this, e );
+
+			// exception thrown
+			log.error( "++++ exception thrown while writing bytes to server on set" );
+			log.error( e.getMessage(), e );
+
+			try {
+				sock.trueClose();
+			}
+			catch ( IOException ioe ) {
+				log.error( "++++ failed to close socket : " + sock.toString() );
+			}
+
+			sock = null;
+		}
+
+		if ( sock != null ) {
+			sock.close();
+			sock = null;
+		}
+
+		return false;
 	}
 
 	private void handleRefreshAndRetry(SockIOPool pool, SockIOPool.SockIO sock) throws IOException {

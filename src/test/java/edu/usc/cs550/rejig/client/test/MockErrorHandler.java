@@ -43,4 +43,9 @@ class MockErrorHandler implements ErrorHandler {
 		final MemcachedClient client, final Throwable error) {
 			throw new RuntimeException(error);
 	}
+
+	public void handleErrorOnConf(
+		final MemcachedClient client, final Throwable error) {
+			throw new RuntimeException(error);
+	}
 }

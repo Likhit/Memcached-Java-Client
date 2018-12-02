@@ -69,4 +69,10 @@ public interface ErrorHandler {
     public void handleErrorOnStats( final MemcachedClient client ,
                                     final Throwable error );
 
+    /**
+     * Called for errors thrown during {@link MemcachedClient#setConfig()} and related methods.
+     */
+    public void handleErrorOnConf( final MemcachedClient client ,
+                                    final Throwable error);
+
 } // interface

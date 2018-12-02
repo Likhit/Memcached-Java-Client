@@ -539,6 +539,16 @@ public class SockIOPool {
 		return host;
 	}
 
+	public SockAndFragmentId getHostSockAndFragmentId( String host ) {
+		int i = 0;
+		for (Fragment f: config.getFragmentList()) {
+			if (f.getAddress().equals(host)) {
+				return getSockAndFragmentId( null, i );
+			}
+		}
+		return null;
+	}
+
 	/**
 	 * Returns appropriate SockIO object given
 	 * string cache key.
