@@ -514,7 +514,8 @@ public class MemcachedClient {
 		// get SockIO obj from hash or from key
 		SockIOPool pool = currentPool.get();
 		int client_config_id = pool.getRejigConfig().getId();
-		SockIOPool.SockIO sock = pool.getSockAndFragmentId( key, hashCode ).sock();
+		SockIOPool.SockAndFragmentId sockAndId = pool.getSockAndFragmentId( key, hashCode );
+		SockIOPool.SockIO sock = sockAndId.sock();
 
 		// return false if unable to get SockIO obj
 		if ( sock == null ) {
@@ -526,6 +527,8 @@ public class MemcachedClient {
 		// build command
 		StringBuilder command = new StringBuilder( "rj " )
 			.append( client_config_id )
+			.append( " " )
+			.append( sockAndId.fragmentNum() )
 			.append( " delete " )
 			.append( key );
 		if ( expiry != null )
@@ -788,7 +791,8 @@ public class MemcachedClient {
 		// get SockIO obj
 		SockIOPool pool = currentPool.get();
 		int client_config_id = pool.getRejigConfig().getId();
-		SockIOPool.SockIO sock = pool.getSockAndFragmentId( key, hashCode ).sock();
+		SockIOPool.SockAndFragmentId sockAndId = pool.getSockAndFragmentId( key, hashCode );
+		SockIOPool.SockIO sock = sockAndId.sock();
 
 		if ( sock == null ) {
 			if ( errorHandler != null )
@@ -912,7 +916,7 @@ public class MemcachedClient {
 
 		// now write the data to the cache server
 		try {
-			String cmd = String.format( "rj %d %s %s %d %d %d\r\n", client_config_id, cmdname, key, flags, (expiry.getTime() / 1000), val.length );
+			String cmd = String.format( "rj %d %d %s %s %d %d %d\r\n", client_config_id, sockAndId.fragmentNum(), cmdname, key, flags, (expiry.getTime() / 1000), val.length );
 			sock.write( cmd.getBytes() );
 			sock.write( val );
 			sock.write( "\r\n".getBytes() );
@@ -1236,7 +1240,8 @@ public class MemcachedClient {
 		// get SockIO obj for given cache key
 		SockIOPool pool = currentPool.get();
 		int client_config_id = pool.getRejigConfig().getId();
-		SockIOPool.SockIO sock = pool.getSockAndFragmentId( key, hashCode ).sock();
+		SockIOPool.SockAndFragmentId sockAndId = pool.getSockAndFragmentId( key, hashCode );
+		SockIOPool.SockIO sock = sockAndId.sock();
 
 		if ( sock == null ) {
 			if ( errorHandler != null )
@@ -1245,7 +1250,7 @@ public class MemcachedClient {
 		}
 
 		try {
-			String cmd = String.format( "rj %d %s %s %d\r\n", client_config_id, cmdname, key, inc );
+			String cmd = String.format( "rj %d %d %s %s %d\r\n", client_config_id, sockAndId.fragmentNum(), cmdname, key, inc );
 			if ( log.isDebugEnabled() )
 				log.debug( "++++ memcache incr/decr command: " + cmd );
 
@@ -1396,7 +1401,7 @@ public class MemcachedClient {
 		}
 
 		try {
-			String cmd = "rj " + client_config_id + " get " + key + "\r\n";
+			String cmd = String.format("rj %d %d get %s\r\n", client_config_id, sockAndId.fragmentNum(), key);
 			if ( log.isDebugEnabled() )
 				log.debug("++++ memcache get command: " + cmd);
 
@@ -1945,7 +1950,7 @@ public class MemcachedClient {
 			}
 
 			// build command
-			String command = "rj " + client_config_id + " flush_all\r\n";
+			String command = String.format("rj %d %d flush_all\r\n", client_config_id, i + 1);
 
 			try {
 				sock.write( command.getBytes() );

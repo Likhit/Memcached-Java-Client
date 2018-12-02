@@ -599,7 +599,7 @@ public class SockIOPool {
 			}
 
 			return new SockAndFragmentId(
-				sock, config.getFragment(0).getId());
+				sock, config.getFragment(0).getId(), 1);
 		}
 
 		// from here on, we are working w/ multiple servers
@@ -610,6 +610,7 @@ public class SockIOPool {
 		// get initial bucket
 		long bucket = getBucket( key, hashCode );
 		Fragment fragment = config.getFragment( (int)bucket );
+		int fragmentNum = ((int)bucket) + 1;
 
 		while ( !tryServers.isEmpty() ) {
 
@@ -623,7 +624,7 @@ public class SockIOPool {
 			if ( sock != null && sock.isConnected() ) {
 				if ( options.aliveCheck ) {
 					if ( sock.isAlive() ) {
-						return new SockAndFragmentId(sock, fragment.getId());
+						return new SockAndFragmentId(sock, fragment.getId(), fragmentNum);
 					}
 					else {
 						sock.close();
@@ -632,7 +633,7 @@ public class SockIOPool {
 					}
 				}
 				else {
-					return new SockAndFragmentId(sock, fragment.getId());
+					return new SockAndFragmentId(sock, fragment.getId(), fragmentNum);
 				}
 			}
 			else {
@@ -1586,12 +1587,17 @@ public class SockIOPool {
 	}
 
 	public static class SockAndFragmentId {
+		// The socket.
 		private SockIO sock;
+		// The fragment id of the fragment that the socket belongs to.
 		private int fragmentId;
+		// The fragment number (index in the fragments array + 1).
+		private int fragmentNum;
 
-		SockAndFragmentId(SockIO sock, int id) {
+		SockAndFragmentId(SockIO sock, int id, int fragmentNum) {
 			this.sock = sock;
 			this.fragmentId = id;
+			this.fragmentNum = fragmentNum;
 		}
 
 		public SockIO sock() {
@@ -1600,6 +1606,10 @@ public class SockIOPool {
 
 		public int fragmentId() {
 			return fragmentId;
+		}
+
+		public int fragmentNum() {
+			return fragmentNum;
 		}
 	}
 }
