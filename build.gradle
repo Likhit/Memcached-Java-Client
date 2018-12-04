@@ -11,10 +11,17 @@ plugins {
     id 'java-library'
 }
 
+configurations {
+    // configuration that holds jars to include in the jar
+    extraLibs
+}
+
 dependencies {
     // These dependency is used internally, and not exposed to consumers on their own compile classpath.
     implementation files('lib/log4j.jar')
     implementation project('RejigInterface')
+
+    extraLibs files('lib/log4j.jar')
 
     // Use JUnit test framework
     testImplementation 'junit:junit:4.12'
@@ -25,6 +32,12 @@ repositories {
     // Use jcenter for resolving your dependencies.
     // You can declare any Maven/Ivy/file repository here.
     jcenter()
+}
+
+jar {
+    from {
+        configurations.extraLibs.collect { it.isDirectory() ? it : zipTree(it) }
+    }
 }
 
 // Run tests as tasks
