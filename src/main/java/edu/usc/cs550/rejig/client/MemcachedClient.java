@@ -1925,11 +1925,9 @@ public class MemcachedClient {
 		int client_config_id = pool.getRejigConfig().getId();
 		if (servers == null) {
 			RejigConfig config = pool.getRejigConfig();
-			servers = new String[config.getFragmentCount()];
-			int i = 0;
-			for (Fragment f : config.getFragmentList()) {
-				servers[i++] = f.getAddress();
-			}
+			HashSet<String> hosts = getAllHosts(config);
+			servers = new String[hosts.size()];
+			servers = hosts.toArray(servers);
 		}
 
 		// if no servers, then return early
@@ -1952,7 +1950,7 @@ public class MemcachedClient {
 			SockIOPool.SockIO sock = sockAndFragmentId.sock();
 
 			// build command
-			String command = String.format("rj %d %d flush_all\r\n", client_config_id, sockAndFragmentId.fragmentNum());
+			String command = "flush_all\r\n";
 
 			try {
 				sock.write( command.getBytes() );
@@ -1960,10 +1958,6 @@ public class MemcachedClient {
 
 				// if we get appropriate response back, then we return true
 				String line = sock.readLine();
-				if ( REFRESH_AND_RETRY.equals( line) ) {
-					handleRefreshAndRetry(pool, sock);
-					return flushAll(servers);
-				}
 				success = ( OK.equals( line ) )
 					? success && true
 					: false;
@@ -2119,11 +2113,9 @@ public class MemcachedClient {
 		SockIOPool pool = currentPool.get();
 		if (servers == null) {
 			RejigConfig config = pool.getRejigConfig();
-			servers = new String[config.getFragmentCount()];
-			int i = 0;
-			for (Fragment f : config.getFragmentList()) {
-				servers[i++] = f.getAddress();
-			}
+			HashSet<String> hosts = getAllHosts(config);
+			servers = new String[hosts.size()];
+			servers = hosts.toArray(servers);
 		}
 
 		// if no servers, then return early
@@ -2229,15 +2221,30 @@ public class MemcachedClient {
 	}
 
 	/**
+	 * Updates the rejig config on all servers to the specified version.
+	 *
+	 * @param value value to store
+	 * @param expiry when to expire the record
+	 * @return true, if the data was successfully stored in all servers.
+	 */
+	public boolean setConfig( RejigConfig config, Date expiry ) {
+		for (String server : getAllHosts(config)) {
+			if (!setConfig(config, expiry, server)) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
 	 * Updates the rejig config on the server to the specified version.
 	 *
 	 * @param value value to store
-	 * @param numberOfFragments the number of fragments to use (for leasing)
 	 * @param expiry when to expire the record
 	 * @param server ip:port of the server to push the config to
 	 * @return true, if the data was successfully stored
 	 */
-	public boolean setConfig( RejigConfig config, int numberOfFragments, Date expiry, String server ) {
+	public boolean setConfig( RejigConfig config, Date expiry, String server ) {
 		// get SockIO obj
 		SockIOPool pool = currentPool.get();
 		SockIOPool.SockAndFragmentId sockAndId = pool.getHostSockAndFragmentId( server );
@@ -2312,7 +2319,7 @@ public class MemcachedClient {
 
 		// now write the data to the cache server
 		try {
-			String cmd = String.format( "rj %d %d conf %d %d %d\r\n", config.getId(), sockAndId.fragmentNum(), flags, (expiry.getTime() / 1000), val.length );
+			String cmd = String.format( "rj %d %d conf %d %d %d\r\n", config.getId(), config.getFragmentCount(), flags, (expiry.getTime() / 1000), val.length );
 			sock.write( cmd.getBytes() );
 			sock.write( val );
 			sock.write( "\r\n".getBytes() );
@@ -2325,7 +2332,7 @@ public class MemcachedClient {
 
 			if ( REFRESH_AND_RETRY.equals(line) ) {
 				if (errorHandler != null) {
-					errorHandler.handleErrorOnConf( this, new IllegalArgumentException("The config id is lower than the current config id."));
+					errorHandler.handleErrorOnConf( this, new IllegalArgumentException("The config is older than the current config on the server."));
 				}
 				sock.close();
 				sock = null;
@@ -2381,7 +2388,7 @@ public class MemcachedClient {
 	 * @param fragmentNum the fragment to grant the lease to
 	 * @param expiry when to expire the record
 	 * @param server ip:port of the server to push the config to
-	 * @return true, if the data was successfully stored
+	 * @return true, if the lease was succesfully granted
 	 */
 	public boolean grantLease( int fragmentNum, Date expiry, String server ) {
 		// get SockIO obj
@@ -2413,7 +2420,7 @@ public class MemcachedClient {
 
 			if ( REFRESH_AND_RETRY.equals(line) ) {
 				if (errorHandler != null) {
-					errorHandler.handleErrorOnGrantLease( this, new IllegalArgumentException("The config id is lower than the current config id."));
+					errorHandler.handleErrorOnGrantLease( this, new IllegalArgumentException("The config id is lower than or the same as the current config id on the server. Host: " + sock.getHost()));
 				}
 				sock.close();
 				sock = null;
@@ -2464,7 +2471,7 @@ public class MemcachedClient {
 	 *
 	 * @param fragmentNum the fragment to grant the lease to
 	 * @param server ip:port of the server to push the config to
-	 * @return true, if the data was successfully stored
+	 * @return true, if the lease was succesfully revoked.
 	 */
 	public boolean revokeLease( int fragmentNum, String server ) {
 		// get SockIO obj
@@ -2540,13 +2547,13 @@ public class MemcachedClient {
 
 	private void handleRefreshAndRetry(SockIOPool pool, SockIOPool.SockIO sock) throws IOException {
 		if ( log.isDebugEnabled() ) {
-			log.debug("++++ refresh and retry");
+			log.debug("++++ refresh and retry. Host: " + sock.getHost());
 		}
 
-		RejigConfig new_config = null;
+		RejigConfig newConfig = null;
 		String line = sock.readLine();
 		if ( END.equals(line) ) {
-			new_config = configReader.getConfig();
+			newConfig = configReader.getConfig();
 		}
 		else if ( line.startsWith( VALUE ) ) {
 			String[] info = line.split(" ");
@@ -2597,12 +2604,28 @@ public class MemcachedClient {
 					throw new NestedIOException( "++++ IOException thrown while trying to uncompress input stream for key: " + key, e );
 				}
 			}
-			new_config = RejigConfig.parseFrom(buf);
+			newConfig = RejigConfig.parseFrom(buf);
+			log.info( "++++ succesfully parsed rejig config." );
 		}
 
+		if (newConfig.getId() <= pool.getRejigConfig().getId()) {
+			if (errorHandler != null) {
+				errorHandler.handleErrorOnRefreshAndRetry( this,
+					new IOException("++++ new config id is same as old one after REFRESH_AND_RETRY. New Config id: " + newConfig.getId() + ". Old Config id: " + pool.getRejigConfig().getId() + ". Host: " + sock.getHost()) );
+			}
+			return;
+		}
 		sock.close();
 		sock = null;
-		compareAndSetSockIOPool(pool, createSockIOPool(new_config));
+		compareAndSetSockIOPool(pool, createSockIOPool(newConfig));
+	}
+
+	private static HashSet<String> getAllHosts(RejigConfig config) {
+		HashSet<String> serverSet = new HashSet<>();
+		for (Fragment f : config.getFragmentList()) {
+			serverSet.add(f.getAddress());
+		}
+		return serverSet;
 	}
 
 	protected final class NIOLoader {

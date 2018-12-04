@@ -23,6 +23,8 @@ import edu.usc.cs550.rejig.interfaces.RejigConfig;
 
 import org.apache.log4j.*;
 
+import java.util.Date;
+
 public class TestMemcached  {
 	public static void main(String[] args) {
 		      // memcached should be running on port 11211 but NOT on 11212
@@ -58,6 +60,12 @@ public class TestMemcached  {
 		MemcachedClient mcc = new MemcachedClient(
 			null, new MockErrorHandler(),
 			"test", configReader, options);
+
+		Date expiry = new Date(System.currentTimeMillis() * 10*60*100);
+		mcc.setConfig(configReader.getConfig(), null, servers[0]);
+		mcc.grantLease(1, expiry, servers[0]);
+		mcc.setConfig(configReader.getConfig(), null, servers[1]);
+		mcc.grantLease(2, expiry, servers[1]);
 
 		// turn off most memcached client logging:
 		edu.usc.cs550.rejig.client.Logger.getLogger( MemcachedClient.class.getName() ).setLevel( edu.usc.cs550.rejig.client.Logger.LEVEL_WARN );

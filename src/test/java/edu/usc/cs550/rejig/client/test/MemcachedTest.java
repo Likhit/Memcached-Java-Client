@@ -75,6 +75,13 @@ public class MemcachedTest {
 			"test", configReader, options);
 		mc.setCompressEnable( false );
 		mc.setCompressThreshold(0);
+
+		Date expiry = new Date(System.currentTimeMillis() * 10*60*100);
+		mc.setConfig(configReader.getConfig(), null, servers[0]);
+		mc.grantLease(1, expiry, servers[0]);
+		mc.setConfig(configReader.getConfig(), null, servers[1]);
+		mc.grantLease(2, expiry, servers[1]);
+
 		// get object to store
 		int[] obj = new int[size];
 		for (int i = 0; i < size; i++) {

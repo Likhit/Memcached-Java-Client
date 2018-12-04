@@ -87,4 +87,10 @@ public interface ErrorHandler {
     public void handleErrorOnRevokeLease( final MemcachedClient client ,
                                     final Throwable error);
 
+    /**
+     * Called for errors thrown during {@link MemcachedClient#revokeLease()} and related methods.
+     */
+    public void handleErrorOnRefreshAndRetry( final MemcachedClient client ,
+                                    final Throwable error);
+
 } // interface

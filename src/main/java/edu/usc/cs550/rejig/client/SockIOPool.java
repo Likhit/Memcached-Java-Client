@@ -360,7 +360,7 @@ public class SockIOPool {
 			if ( initialized
 					&& ( availPool != null )
 					&& ( busyPool != null ) ) {
-				log.error( "++++ trying to initialize an already initialized pool" );
+						log.error( "++++ trying to initialize an already initialized pool" );
 				return this;
 			}
 
@@ -545,6 +545,7 @@ public class SockIOPool {
 			if (f.getAddress().equals(host)) {
 				return getSockAndFragmentId( null, i );
 			}
+			i++;
 		}
 		return null;
 	}

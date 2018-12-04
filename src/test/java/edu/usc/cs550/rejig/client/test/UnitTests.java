@@ -320,15 +320,41 @@ public class UnitTests {
 		}
 	}
 
+	// Sets the config object into the client and grant a
+	// lease to all fragments for 10 mins.
+	public static void setup(RejigConfig config) {
+		boolean b = mc.setConfig( config, null );
+		assertion( b, "+ setting config failed" );
+
+		Date expiry = new Date(System.currentTimeMillis() + 10*60*1000);
+		int fragmentNum = 1;
+		for ( Fragment f : config.getFragmentList() ) {
+			boolean g = mc.grantLease( fragmentNum, expiry, f.getAddress() );
+			assertion( g, "+ granting lease failed: Fragment num: " + fragmentNum );
+			fragmentNum++;
+		}
+	}
+
+	// Revoke all leases granted.
+	private static void cleanup(RejigConfig config) {
+		int fragmentNum = 1;
+		for ( Fragment f : config.getFragmentList() ) {
+			boolean g = mc.revokeLease( fragmentNum, f.getAddress() );
+			assertion( g, "+ revoking lease failed. Fragment num: " + fragmentNum );
+			fragmentNum++;
+		}
+	}
+
 	private static void assertion(boolean condition, String errorMessage) {
 		if (!condition) {
 			throw new AssertionError(errorMessage);
 		}
 	}
 
-	public static void runAlTests( MemcachedClient mc ) {
-		mc.flushAll();
-		test14();
+	public static void runAlTests( MemcachedClient mc, boolean run14 ) {
+		if (run14) {
+			test14();
+		}
 		for ( int t = 0; t < 2; t++ ) {
 			mc.setCompressEnable( ( t&1 ) == 1 );
 
@@ -408,6 +434,34 @@ public class UnitTests {
 		options.hashingAlg = SockIOPool.FragmentHashingAlgo.NATIVE_HASH;
 
 		// set RejigConfig
+		RejigConfig config = createConfig1(serverlist);
+		MockRejigConfigReader configReader = new MockRejigConfigReader();
+		configReader.setConfig(config);
+
+		// get client instance
+		mc = new MemcachedClient(null, new MockErrorHandler(),
+			"test", configReader, options);
+
+		// run tests.
+		mc.flushAll();
+		System.out.println("Running tests.");
+		setup(config);
+		runAlTests( mc, true );
+
+		// change the config.
+		System.out.println("Re-running with config change.");
+		setConfig2(config, configReader, mc);
+
+		// run tests again
+		runAlTests( mc, false );
+
+		cleanup(configReader.getConfig());
+		mc.flushAll();
+		// shutdown
+		mc.shutDown();
+	}
+
+	private static RejigConfig createConfig1(String[] serverlist) {
 		Integer[] weights = { 1, 1, 1, 1, 10, 5, 1, 1, 1, 3 };
 		RejigConfig.Builder builder = RejigConfig.newBuilder()
 			.setId(1);
@@ -421,13 +475,24 @@ public class UnitTests {
 				);
 			}
 		}
+		return builder.build();
+	}
 
-		// get client instance
-		MockRejigConfigReader configReader = new MockRejigConfigReader();
-		configReader.setConfig(builder.build());
-		mc = new MemcachedClient(null, new MockErrorHandler(),
-			"test", configReader, options);
-		runAlTests( mc );
+	private static void setConfig2(RejigConfig curr, MockRejigConfigReader configReader, MemcachedClient mc) {
+		RejigConfig.Builder builder = curr.toBuilder().setId(2);
+		for (int i = 9; i < 14; i++) {
+			builder.setFragment(i, Fragment.newBuilder()
+				.setId(2)
+				.setAddress("localhost:11215")
+				.build()
+			);
+			mc.revokeLease(i + 1, "localhost:11214");
+			mc.grantLease(i + 1, new Date(System.currentTimeMillis() + 10*60*1000), "localhost:11215");
+		}
+		RejigConfig config = builder.build();
+		configReader.setConfig(config);
+		// Update impacted server.
+		mc.setConfig(config, null, "localhost:11214");
 	}
 
 	/**

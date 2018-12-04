@@ -64,6 +64,10 @@ public class MemcachedBench {
 			"test", configReader, options);
 		mc.setCompressEnable( false );
 
+		Date expiry = new Date(System.currentTimeMillis() * 10*60*100);
+		mc.setConfig(configReader.getConfig(), null, servers[0]);
+		mc.grantLease(1, expiry, servers[0]);
+
 		String keyBase = "testKey";
 		String object = "This is a test of an object blah blah es, serialization does not seem to slow things down so much.  The gzip compression is horrible horrible performance, so we only use it for very large objects.  I have not done any heavy benchmarking recently";
 
