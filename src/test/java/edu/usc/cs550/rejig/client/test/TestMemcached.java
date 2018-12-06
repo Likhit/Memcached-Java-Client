@@ -27,13 +27,13 @@ import java.util.Date;
 
 public class TestMemcached  {
 	public static void main(String[] args) {
-		      // memcached should be running on port 11211 but NOT on 11212
+		// memcached should be running on port 11211 but NOT on 11212
 
 		BasicConfigurator.configure();
 		String[] servers = { "localhost:11211", "localhost:11212" };
-    // initialize the pool options
+		// initialize the pool options
 		SockIOPool.SockIOPoolOptions options = new SockIOPool.SockIOPoolOptions();
-    options.failover = true;
+		options.failover = true;
 		options.initConn = 10;
 		options.minConn = 5;
 		options.maxConn = 250;
@@ -42,7 +42,7 @@ public class TestMemcached  {
     options.socketTO = 3000;
     options.aliveCheck = true;
 
-    // set RejigConfig
+		// set RejigConfig
 		MockRejigConfigReader configReader = new MockRejigConfigReader();
 		configReader.setConfig(RejigConfig.newBuilder()
 			.setId(1)
